@@ -1,0 +1,4 @@
+output/
+*.debug
+.DS_Store
+__pycache__/

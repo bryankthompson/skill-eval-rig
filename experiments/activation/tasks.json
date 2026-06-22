@@ -1,0 +1,38 @@
+{
+  "//": "VS Code launcher for the interactive activation experiment. Edit cwd paths to match the dirs you built with gen_listing.py, then: Run Task -> pick a level. Each opens an interactive claude in that condition. (env -u ANTHROPIC_API_KEY uses your OAuth creds; drop it if your ANTHROPIC_API_KEY is valid.)",
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "activation: L0_under",
+      "type": "shell",
+      "command": "env -u ANTHROPIC_API_KEY claude --allowedTools \"Read,Bash,Glob,Grep\"",
+      "options": { "cwd": "/tmp/act/L0_under" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true, "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "activation: L2_over",
+      "type": "shell",
+      "command": "env -u ANTHROPIC_API_KEY claude --allowedTools \"Read,Bash,Glob,Grep\"",
+      "options": { "cwd": "/tmp/act/L2_over" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true, "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "activation: L4_present (control)",
+      "type": "shell",
+      "command": "env -u ANTHROPIC_API_KEY claude --allowedTools \"Read,Bash,Glob,Grep\"",
+      "options": { "cwd": "/tmp/act/L4_present" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true, "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "activation: L4_dropped (needle goes dark)",
+      "type": "shell",
+      "command": "env -u ANTHROPIC_API_KEY claude --allowedTools \"Read,Bash,Glob,Grep\"",
+      "options": { "cwd": "/tmp/act/L4_dropped" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true, "clear": true },
+      "problemMatcher": []
+    }
+  ]
+}
