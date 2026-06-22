@@ -31,8 +31,22 @@ bash experiments/selection.sh
 # chaining: depth 2/5/10 (+ oversized mid-chain file), opus + haiku
 bash experiments/chaining.sh
 
-# activation: interactive — see experiments/activation/RUNBOOK.md
+# adversarial: prompt-injection (blatant vs plausible) — model-safety split  (see SECURITY.md)
+bash experiments/adversarial.sh
+
+# synthesis: multi-file sum, K=3/8/20 — recall vs arithmetic
+bash experiments/synthesis.sh
+
+# precedence: skill vs CLAUDE.md vs user — the instruction hierarchy
+bash experiments/precedence.sh
+
+# activation + cross-skill handoff: interactive — see experiments/activation/RUNBOOK.md
+#   prefill_report.py scrapes the interactive transcripts so you don't hand-transcribe results
 ```
+
+**Read the results:** `FINDINGS.md` is the full map across all axes (incl. the Opus/Haiku
+safety asymmetry and the skill-vs-CLAUDE.md precedence hierarchy); `SECURITY.md` covers the
+reference-file prompt-injection surface; `RESULTS.md` is the original structural baseline.
 Pass a single model to the headless scripts to halve the runs, e.g. `experiments/selection.sh claude-opus-4-8`.
 
 ## Building your own conditions

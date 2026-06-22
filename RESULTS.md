@@ -1,5 +1,10 @@
 # Measured baseline
 
+> This is the original **structural** baseline (selection/chaining/budget/activation). The
+> full map — adversarial safety, the Opus/Haiku asymmetry, instruction precedence, cross-skill
+> handoff, and the scale-dodge — is in **`FINDINGS.md`**; the injection surface in **`SECURITY.md`**.
+
+
 Captured 2026-06-22 · `claude` CLI **2.1.185** · models **claude-opus-4-8 (1M context)** and **claude-haiku-4-5** · ~110 trials, N=4–5 per cell.
 
 ## Budget (structural, headless)
