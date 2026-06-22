@@ -57,6 +57,13 @@ Pass a single model to the headless scripts to halve the runs, e.g. `experiments
 
 **Point it at your real skills:** drop your skill folders into a project's `.claude/skills/`, then use `run_trials.sh` + `score.py` with your own questions/needles. The generators are only for controlled synthetic conditions.
 
+## Contributing / share your results
+This is a general harness — the methodology and threat classes apply to any model's
+skills/RAG/tool-routing, not just Claude (only the example findings in `FINDINGS.md` happen to
+be Claude). If you run it on your own skills, adapt it to another model, or find a new edge:
+**open a PR** (a new `experiments/<axis>.sh` + a `FINDINGS.md` entry) or **open an issue** with
+your results. New attack classes, other models' results, and harder fixtures especially welcome.
+
 ## Auth note
 The scripts `env -u ANTHROPIC_API_KEY claude …` so the CLI uses your interactive OAuth
 credentials (a stale/invalid `ANTHROPIC_API_KEY` in the environment otherwise shadows them
