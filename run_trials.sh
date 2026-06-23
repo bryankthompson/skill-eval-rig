@@ -39,7 +39,10 @@ if [ "${USE_OAUTH:-1}" = "0" ]; then AUTHENV=(env); fi
 
 for n in $(seq 1 "$N"); do
   f="$OUT/$(basename "$PROJ")__${MODEL}__${n}.jsonl"
-  if ( cd "$PROJ" && "${AUTHENV[@]}" claude -p "${PREFIX}${Q}" "${MFLAG[@]}" \
+  # ${MFLAG[@]+"..."} guards the empty-array expansion: on bash 3.2 (stock macOS) a bare
+  # "${MFLAG[@]}" under set -u aborts with "unbound variable" when MODEL='-' (MFLAG empty),
+  # which would silently turn every trial INVALID. The +-form expands to nothing when unset.
+  if ( cd "$PROJ" && "${AUTHENV[@]}" claude -p "${PREFIX}${Q}" ${MFLAG[@]+"${MFLAG[@]}"} \
         --output-format stream-json --verbose --max-turns 16 \
         --allowedTools "Read,Bash,Glob,Grep" </dev/null >"$f" 2>"$f.err" ); then
     echo "trial $n -> $f"
