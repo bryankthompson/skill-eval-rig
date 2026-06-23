@@ -57,36 +57,37 @@ def turns(path):
     def flush():
         if cur_u is not None:
             return (cur_u, "\n".join(cur_a), list(cur_t))
-    for line in open(path, errors="ignore"):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            e = json.loads(line)
-        except Exception:
-            continue
-        t = e.get("type")
-        if t == "user" and is_real_prompt(e):
-            t0 = flush()
-            if t0:
-                yield t0
-            cur_u, cur_a, cur_t = text_of((e.get("message") or {}).get("content")), [], []
-        elif t == "user":
-            # skill injection / tool result: capture any injected skill name into the span's tools
-            inj = text_of((e.get("message") or {}).get("content"))
-            m = __import__("re").search(r"Base directory for this skill:\s*\S*/skills/([^/\s]+)", inj)
-            if m and cur_u is not None:
-                cur_t.append(("SkillInjected", json.dumps({"skill": m.group(1)})))
-        elif t == "assistant":
-            msg = e.get("message") or {}
-            cont = msg.get("content") if isinstance(msg.get("content"), list) else []
-            for c in cont:
-                if not isinstance(c, dict):
-                    continue
-                if c.get("type") == "text":
-                    cur_a.append(c.get("text", ""))
-                elif c.get("type") == "tool_use":
-                    cur_t.append((c.get("name", ""), json.dumps(c.get("input", {}))))
+    with open(path, errors="ignore") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            t = e.get("type")
+            if t == "user" and is_real_prompt(e):
+                t0 = flush()
+                if t0:
+                    yield t0
+                cur_u, cur_a, cur_t = text_of((e.get("message") or {}).get("content")), [], []
+            elif t == "user":
+                # skill injection / tool result: capture any injected skill name into the span's tools
+                inj = text_of((e.get("message") or {}).get("content"))
+                m = __import__("re").search(r"Base directory for this skill:\s*\S*/skills/([^/\s]+)", inj)
+                if m and cur_u is not None:
+                    cur_t.append(("SkillInjected", json.dumps({"skill": m.group(1)})))
+            elif t == "assistant":
+                msg = e.get("message") or {}
+                cont = msg.get("content") if isinstance(msg.get("content"), list) else []
+                for c in cont:
+                    if not isinstance(c, dict):
+                        continue
+                    if c.get("type") == "text":
+                        cur_a.append(c.get("text", ""))
+                    elif c.get("type") == "tool_use":
+                        cur_t.append((c.get("name", ""), json.dumps(c.get("input", {}))))
     t0 = flush()
     if t0:
         yield t0
@@ -168,7 +169,8 @@ def main():
             out.append(f"  - **verdict: {verdict}**\n")
     rep = "\n".join(out)
     print(rep)
-    open("/tmp/xskill-validation-report.md", "w").write(rep + "\n")
+    with open("/tmp/xskill-validation-report.md", "w") as fh:
+        fh.write(rep + "\n")
     print("\n(written to /tmp/xskill-validation-report.md)")
 
 if __name__ == "__main__":
