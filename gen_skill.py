@@ -33,7 +33,11 @@ def main():
     ap.add_argument("--needle-desc", default="Aggressive maintenance profile for the high-write OLTP tier: background cleanup throughput cost limit.",
                     help="selection/good: the discriminating index line + content framing for the needle file")
     ap.add_argument("--distractor-desc", default="Generic database tier configuration profile.")
-    ap.add_argument("--leaf-lines", type=int, default=40, help="lines of filler in the needle file before the token (depth)")
+    ap.add_argument("--leaf-lines", type=int, default=40, help="lines of filler in the needle/leaf file before the token (depth); honored in BOTH selection and chain modes")
+    ap.add_argument("--disjoint-body", action="store_true",
+                    help="selection: write the needle body with a NEUTRAL heading (no query/index "
+                         "terms) so the body offers no lexical grep handle — isolates routing-signal "
+                         "(index) quality from body lexical-recoverability (H3/L1)")
     ap.add_argument("--chain-depth", type=int, default=5, help="chain mode: number of hops")
     ap.add_argument("--big-step", type=int, default=0, help="chain mode: make this step oversized (0=none)")
     ap.add_argument("--big-lines", type=int, default=2600)
@@ -47,8 +51,19 @@ def main():
         for i in range(1, args.files + 1):
             fn = os.path.join(refs, f"t{i:04d}.md")
             if i == needle_i:
-                body = ["# profile"] + [f"- note {k}" for k in range(args.leaf_lines)]
-                body += ["", f"## {args.needle_desc}", f"The documented value is {args.needle}."]
+                if args.disjoint_body:
+                    # Structurally IDENTICAL to distractors (same '# topic N' heading + value-line
+                    # shape) so NO query-derived grep handle is unique to the needle — not the
+                    # 'documented value' phrasing, the '# profile' heading, or the '- note' lines
+                    # that previously fingerprinted it. The token sits in a 'canonical figure' line
+                    # whose words never appear in the query, so the INDEX is the only routing
+                    # channel; selection.sh asserts disjointness before running.
+                    body = [f"# topic {i}"]
+                    body += [f"- {args.distractor_desc} variant {i}-{k} value V{(i*53+k)%9000}" for k in range(8)]
+                    body += [f"The canonical figure is {args.needle}."]
+                else:
+                    body = ["# profile"] + [f"- note {k}" for k in range(args.leaf_lines)]
+                    body += ["", f"## {args.needle_desc}", f"The documented value is {args.needle}."]
             else:
                 body = [f"# topic {i}"] + [f"- {args.distractor_desc} variant {i}-{k} value V{(i*53+k)%9000}" for k in range(8)]
             write(fn, "\n".join(body) + "\n")
@@ -75,7 +90,7 @@ def main():
             write(os.path.join(refs, f"step{s}.md"),
                   f"# Step {s}\nContinue to the next step: [step{s+1}.md](step{s+1}.md)\n{extra}\n")
         write(os.path.join(refs, f"step{D}.md"),
-              f"# Step {D}\n" + "\n".join(f"- final detail {k}" for k in range(20)) + f"\n\nThe final token is {args.needle}.\n")
+              f"# Step {D}\n" + "\n".join(f"- final detail {k}" for k in range(args.leaf_lines)) + f"\n\nThe final token is {args.needle}.\n")
         write(os.path.join(base, "SKILL.md"),
               f"---\nname: {args.name}\ndescription: A {D}-step runbook. Walk it to the final step.\n---\n"
               f"# {args.name}\nBegin by reading [references/step1.md](references/step1.md); follow each step's pointer to the next, to the end.\n")

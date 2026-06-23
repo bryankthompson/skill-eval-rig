@@ -108,14 +108,33 @@ def analyze_session(path, token, target, marker):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--since-hours", type=float, default=12.0)
+    # M9: parameterize a single ad-hoc test so a fresh clone can point this at its OWN run
+    # (slug/needle/target matching what gen_listing.py emits) instead of the baked-in past run.
+    ap.add_argument("--slug", help="project-slug substring to scrape (overrides the built-in TESTS)")
+    ap.add_argument("--needle", help="needle token proving the skill was used")
+    ap.add_argument("--target", default=None, help="target skill name to confirm engagement (optional)")
+    ap.add_argument("--marker", help="natural-prompt marker substring")
+    ap.add_argument("--label", default="custom", help="label for the --slug test")
     args = ap.parse_args()
     cutoff = time.time() - args.since_hours * 3600
 
+    if args.slug:
+        if not (args.needle and args.marker):
+            ap.error("--slug requires --needle and --marker")
+        tests_to_run = [(args.label, args.slug, args.needle, args.target, args.marker)]
+    else:
+        tests_to_run = TESTS
+
     out = ["# Cross-skill + activation validation — auto-filled report",
            f"_scraped from interactive transcripts (last {args.since_hours:g}h) — verify the actuals before quoting_\n"]
-    for label, slug, token, target, marker in TESTS:
+    for label, slug, token, target, marker in tests_to_run:
         out.append(f"## {label}")
         dirs = [d for d in glob.glob(os.path.join(PROJ, f"*{slug}*")) if os.path.isdir(d)]
+        if len(dirs) > 1:
+            # The slug glob is an unanchored substring match — warn on collisions so a stale or
+            # unrelated project dir isn't silently scraped without provenance (M9).
+            out.append(f"- ⚠ {len(dirs)} project dirs match `*{slug}*` — scraping all; verify provenance: "
+                       + ", ".join(os.path.basename(d) for d in dirs))
         sessions = []
         for d in dirs:
             for f in glob.glob(os.path.join(d, "*.jsonl")):

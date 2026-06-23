@@ -12,8 +12,20 @@ RIG="$(cd "$(dirname "$0")/.." && pwd)"; WORK=/tmp/seval-budget; rm -rf "$WORK";
 AUTHENV=(env -u ANTHROPIC_API_KEY)
 if [ "${USE_OAUTH:-1}" = "0" ]; then AUTHENV=(env); fi
 
+# M13/M6: echo the CLI version — this table is parsed from UNPINNED claude --debug log strings.
+"${AUTHENV[@]}" claude --version 2>/dev/null | sed 's/^/cli: /' || echo "cli: (unavailable)"
+# NOTE: set -e is deliberately NOT used here — the marker greps below legitimately exit nonzero
+# on a no-match (that IS the signal), so set -e would abort spuriously; the guard below catches
+# a vanished format loudly instead.
+
 probe () { # $1=label $2=projdir
   ( cd "$2" && "${AUTHENV[@]}" claude -p hi --debug --debug-file "$WORK/$1.debug" </dev/null >/dev/null 2>&1 ) || true
+  # M6: if NONE of the expected markers is present, the CLI debug format likely changed — the
+  # table would otherwise silently print "under budget (no warning)" for every row while
+  # confirming nothing. Fail loudly instead of quietly.
+  if ! grep -aqE "Sending [0-9]+ skills|over budget|model=claude-" "$WORK/$1.debug" 2>/dev/null; then
+    echo "WARN[$1]: no recognized marker in claude --debug output — format may have changed; budget row UNRELIABLE" >&2
+  fi
   local sent over model
   model=$(grep -aoE "model=claude-[a-z0-9.-]+(\[1m\])?" "$WORK/$1.debug" | head -1)
   sent=$(grep -aoE "Sending [0-9]+ skills via attachment" "$WORK/$1.debug" | head -1)
