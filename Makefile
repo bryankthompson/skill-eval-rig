@@ -1,6 +1,7 @@
 # skill-eval-rig — developer tasks.
-# `make test` runs the scorer self-tests against committed fixtures (no live `claude`, CI-safe).
+# `make test` runs the scorer + prefill self-tests against committed fixtures (no live `claude`,
+# CI-safe). These pin the instrument behind every published number.
 
 .PHONY: test
 test:
-	python3 tests/test_score.py
+	python3 -m unittest discover -s tests -p 'test_*.py' -v
