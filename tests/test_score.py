@@ -169,6 +169,16 @@ class CliAggregate(unittest.TestCase):
         self.assertIn("correct=1/1", out)
         self.assertIn("invalid=2/3", out)
 
+    def test_nref_counts_real_refs_not_config(self):
+        # M1 regression: nref must count real ref files (comp-NN) and EXCLUDE config files
+        # (tasks.json). The old startswith(("t","step")) did the opposite — counted tasks.json,
+        # missed comp-NN. Chosen so the old and new logic give DIFFERENT numbers (2.0 vs 1.0).
+        _write(os.path.join(self.d, "agg__test-model__1.jsonl"),
+               [_read("references/comp-01.md"), _read("references/comp-02.md"),
+                _read("tasks.json"), _result("value is 4200.")])
+        out = self._run("--needle", "4200").stdout
+        self.assertIn("avg_files_read=2.0", out)  # old startswith logic would report 1.0
+
     def test_max_turns_reported_as_truncated(self):
         # M5: a max-turns truncation is excluded from rates AND surfaced as truncated=, not hidden.
         _write(os.path.join(self.d, "agg__test-model__1.jsonl"),

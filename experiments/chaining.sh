@@ -11,8 +11,10 @@ Q="Follow the runbook to its final step and report the final token. Output ONLY 
 for SPEC in "2:0" "5:0" "10:6"; do   # depth:big_step
   D="${SPEC%%:*}"; BIG="${SPEC##*:}"
   P="$WORK/depth${D}"
+  # --leaf-lines 20 pins the prior leaf size (the flag became live in chain mode; default is 40)
+  # so this committed fixture's depth matches the RESULTS numbers produced before the fix.
   python3 "$RIG/gen_skill.py" --out "$P" --name deepchain --mode chain --chain-depth "$D" \
-     --big-step "$BIG" --needle "OMEGA-5521-KZ" >/dev/null
+     --big-step "$BIG" --leaf-lines 20 --needle "OMEGA-5521-KZ" >/dev/null
   for M in "${MODELS[@]}"; do
     bash "$RIG/run_trials.sh" "$P" deepchain "$M" 4 "$Q" "$WORK/out/depth${D}" >/dev/null
   done

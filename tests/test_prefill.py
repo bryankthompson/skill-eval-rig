@@ -61,6 +61,18 @@ class AnalyzeSession(unittest.TestCase):
         self.assertFalse(fired)
         self.assertFalse(token_hit)
 
+    def test_slash_command_turn_is_not_natural_prompt(self):
+        # The /-command guard is what distinguishes AUTO-activation from a FORCED /skill invocation
+        # — the core of the activation-cliff measurement. A turn whose prompt starts with /<skill>
+        # must NOT be scored as the natural-activation prompt (here: no natural turn -> None).
+        p = os.path.join(self.d, "s4.jsonl")
+        _transcript(p, [
+            _user(f"/{TARGET}\nWhat is the {MARKER}?"),
+            _assistant_tool("Read", {"file_path": "references/autovacuum.md"}),
+            _assistant_text(f"The value is {TOKEN}."),
+        ])
+        self.assertIsNone(pr.analyze_session(p, TOKEN, TARGET, MARKER))
+
     def test_skill_injection_line_not_a_turn_boundary(self):
         # A skill-injection 'user' line must fold into the current turn, not split the answer away.
         p = os.path.join(self.d, "s3.jsonl")

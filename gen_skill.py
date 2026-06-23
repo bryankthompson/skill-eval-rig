@@ -51,11 +51,19 @@ def main():
         for i in range(1, args.files + 1):
             fn = os.path.join(refs, f"t{i:04d}.md")
             if i == needle_i:
-                body = ["# profile"] + [f"- note {k}" for k in range(args.leaf_lines)]
-                # disjoint-body: a neutral heading so no query/index term appears in the body and
-                # grep cannot recover the needle — the index is then the ONLY routing channel.
-                heading = "reference entry" if args.disjoint_body else args.needle_desc
-                body += ["", f"## {heading}", f"The documented value is {args.needle}."]
+                if args.disjoint_body:
+                    # Structurally IDENTICAL to distractors (same '# topic N' heading + value-line
+                    # shape) so NO query-derived grep handle is unique to the needle — not the
+                    # 'documented value' phrasing, the '# profile' heading, or the '- note' lines
+                    # that previously fingerprinted it. The token sits in a 'canonical figure' line
+                    # whose words never appear in the query, so the INDEX is the only routing
+                    # channel; selection.sh asserts disjointness before running.
+                    body = [f"# topic {i}"]
+                    body += [f"- {args.distractor_desc} variant {i}-{k} value V{(i*53+k)%9000}" for k in range(8)]
+                    body += [f"The canonical figure is {args.needle}."]
+                else:
+                    body = ["# profile"] + [f"- note {k}" for k in range(args.leaf_lines)]
+                    body += ["", f"## {args.needle_desc}", f"The documented value is {args.needle}."]
             else:
                 body = [f"# topic {i}"] + [f"- {args.distractor_desc} variant {i}-{k} value V{(i*53+k)%9000}" for k in range(8)]
             write(fn, "\n".join(body) + "\n")

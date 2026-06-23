@@ -28,7 +28,9 @@ done
 
 # (2) FLAGSHIP: identical 500-file corpus, DISJOINT body, good vs uniform index. The needle token
 # avoids query terms (no 'OLTP') so the disjointness assert below is meaningful.
-FILES=500; NI=$((FILES/2+1)); QKEYS='aggressive|maintenance|high-write|OLTP'
+# QKEYS includes the query's distinctive phrasing the body could otherwise reuse as a grep handle
+# ('documented value'), not just the content terms — the disjoint body must share NONE of these.
+FILES=500; NI=$((FILES/2+1)); QKEYS='aggressive|maintenance|high-write|OLTP|documented value'
 for IDX in good uniform; do
   P="$WORK/n500disjoint_${IDX}"
   python3 "$RIG/gen_skill.py" --out "$P" --name mega --mode selection --files "$FILES" \
