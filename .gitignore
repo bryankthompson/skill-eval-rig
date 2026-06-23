@@ -2,3 +2,7 @@ output/
 *.debug
 .DS_Store
 __pycache__/
+# trial outputs + per-trial stderr; never commit a clone's real-corpus transcripts (N3)
+_trials/
+*.jsonl
+.claude/settings.json

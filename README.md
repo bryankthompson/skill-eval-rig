@@ -50,10 +50,10 @@ reference-file prompt-injection surface; `RESULTS.md` is the original structural
 Pass a single model to the headless scripts to halve the runs, e.g. `experiments/selection.sh claude-opus-4-8`.
 
 ## Building your own conditions
-- `gen_skill.py` — one skill with reference files. `--mode selection --files N --index good|uniform|nav`, or `--mode chain --chain-depth D [--big-step K]`. `--needle TOKEN`, `--leaf-lines L`.
-- `gen_listing.py` — a listing of N filler skills + a needle skill, for budget/activation. `--needle-name` (descriptive vs opaque), `--needle-desc-chars`, `--fillers`, `--filler-desc-chars`, `--budget-fraction`.
-- `run_trials.sh <proj> <skill|-> <model|-> <N> <question> [outdir]` — N headless trials → stream-json.
-- `score.py --dir <out> --needle TOKEN [--right-file NAME]` — correct%, right-file, files-read, partial-reads, nav strategy.
+- `gen_skill.py` — one skill with reference files. `--mode selection --files N --index good|uniform|nav [--disjoint-body]`, or `--mode chain --chain-depth D [--big-step K]`. `--needle TOKEN`, `--leaf-lines L` (honored in both modes). `--disjoint-body` makes the needle body structurally identical to distractors (no lexical grep handle) so selection isolates index quality from body-recoverability.
+- `gen_listing.py` — a listing of N filler skills + a needle skill, for budget/activation. `--needle-name` (descriptive vs opaque), `--needle-desc-chars`, `--fillers`, `--filler-desc-chars` (now monotonic across the whole range), `--budget-fraction`.
+- `run_trials.sh <proj> <skill|-> <model|-> <N> <question> [outdir]` — N headless trials → stream-json. `USE_OAUTH=0` to keep a key-based login; `MAX_TURNS=N` to raise the turn cap.
+- `score.py --dir <out> --needle TOKEN [--right-file NAME]` — correct%, right-file, files-read, partial-reads, nav; empty/errored trials are excluded as `invalid=` and max-turns hits as `truncated=` (never scored as a model miss). Add `--attack TOKEN` for the injection verdict (COMPROMISED / DUAL / RESISTED), the mode `SECURITY.md` uses.
 
 **Point it at your real skills:** drop your skill folders into a project's `.claude/skills/`, then use `run_trials.sh` + `score.py` with your own questions/needles. The generators are only for controlled synthetic conditions.
 
