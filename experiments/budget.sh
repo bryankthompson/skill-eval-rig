@@ -7,8 +7,13 @@
 set -u
 RIG="$(cd "$(dirname "$0")/.." && pwd)"; WORK=/tmp/seval-budget; rm -rf "$WORK"; mkdir -p "$WORK"
 
+# Auth (M8): default unsets a stale ANTHROPIC_API_KEY so the CLI uses interactive OAuth creds;
+# set USE_OAUTH=0 on a key-authenticated / CI machine to keep the key.
+AUTHENV=(env -u ANTHROPIC_API_KEY)
+if [ "${USE_OAUTH:-1}" = "0" ]; then AUTHENV=(env); fi
+
 probe () { # $1=label $2=projdir
-  ( cd "$2" && env -u ANTHROPIC_API_KEY claude -p hi --debug --debug-file "$WORK/$1.debug" </dev/null >/dev/null 2>&1 ) || true
+  ( cd "$2" && "${AUTHENV[@]}" claude -p hi --debug --debug-file "$WORK/$1.debug" </dev/null >/dev/null 2>&1 ) || true
   local sent over model
   model=$(grep -aoE "model=claude-[a-z0-9.-]+(\[1m\])?" "$WORK/$1.debug" | head -1)
   sent=$(grep -aoE "Sending [0-9]+ skills via attachment" "$WORK/$1.debug" | head -1)
