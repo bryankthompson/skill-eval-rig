@@ -19,7 +19,8 @@ import argparse, os, sys
 
 def write(p, s):
     os.makedirs(os.path.dirname(p), exist_ok=True)
-    open(p, "w").write(s)
+    with open(p, "w") as fh:
+        fh.write(s)
 
 def main():
     ap = argparse.ArgumentParser()

@@ -5,7 +5,7 @@
 > handoff, and the scale-dodge — is in **`FINDINGS.md`**; the injection surface in **`SECURITY.md`**.
 
 
-Captured 2026-06-22 · `claude` CLI **2.1.185** · models **claude-opus-4-8 (1M context)** and **claude-haiku-4-5** · ~110 trials, N=4–5 per cell.
+Captured 2026-06-22 · `claude` CLI **2.1.185** · models **claude-opus-4-8 (1M context)** and **claude-haiku-4-5** · ~110 trials, N=4–5 per cell. (This is the original **structural baseline**; the full campaign mapped in `FINDINGS.md` is ~250 trials across all axes — the two totals differ because they cover different scopes.)
 
 ## Budget (structural, headless)
 The always-loaded skill listing is capped by `skillListingBudgetFraction` (default **1%** of context), expressed in **characters**:
@@ -18,12 +18,16 @@ The always-loaded skill listing is capped by `skillListingBudgetFraction` (defau
 
 Budget measured at **~30,000 chars on the 1M-context model** (≈1% of context). It scales with the context window, so on a 200K-context model it is ~6× smaller — which is why a ~13-skill plugin can already consume ~73% of the budget there. Over budget, descriptions are dropped **most-expensive-first** (lean descriptions are very hard to evict); **skill names are always retained**.
 
+> The skill counts + char totals above are **illustrative, from a larger manual sweep**. The committed `experiments/budget.sh` builds **7 / 25 / 71**-skill listings and reads the over/under-budget warning straight out of `claude --debug` (with a fail-loud guard if the markers vanish) — it does not print the char column. Re-run it to confirm the threshold on your CLI version.
+
 ## Chaining (headless) — never broke
 | Depth | Extra | Opus | Haiku | Reads |
 |---|---|---|---|---|
-| 2 hops | 271-line leaf | 5/5 | 4/4 | full |
+| 2 hops | 271-line leaf¹ | 5/5 | 4/4 | full |
 | 5 hops | — | 4/4 | 4/4 | full |
 | 10 hops | 2,600-line mid-chain file | 4/4 | 4/4 | full (offset/grep self-correct on oversize) |
+
+¹ The committed `chaining.sh` uses a **20-line leaf**; the 271-line-leaf row came from a manual `--leaf-lines 271` run. That flag is now live in chain mode (it was previously ignored), so the row is reproducible with `--leaf-lines 271`.
 
 The spec's "nested reference → `head -100` partial read → incomplete info" failure did not reproduce.
 
@@ -36,7 +40,7 @@ The spec's "nested reference → `head -100` partial read → incomplete info" f
 | **500** | **uniform + lexically-disjoint query** | **0/5** | **0/5** | gave up / wrong |
 | 500 | same corpus, **one discriminating index line** | **5/5** | — | 1 |
 
-The decisive contrast: identical 500-file corpus and query, flip only the needle's index entry quality → **0/5 → 5/5** on both models. The constraint is description/index quality, not file count.
+The decisive contrast: identical 500-file corpus and query, flip only the needle's index entry quality → **0/5 → 5/5** on both models. The constraint is description/index quality, not file count. (Now reproducible: `experiments/selection.sh` builds this 500-file cell with `--disjoint-body` — the needle body is structurally identical to distractors so there is no lexical grep handle — plus a pre-run assert that no query term is recoverable, so the uniform cell genuinely collapses.)
 
 ## Activation (interactive only) — the silent cliff
 | Needle name | Description in listing | Auto-fires? |

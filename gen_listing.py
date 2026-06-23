@@ -22,7 +22,9 @@ BIG = ("Operate configure monitor and troubleshoot this subsystem including prov
        "tuning slow queries connection pooling cost optimization disaster recovery and migration runbooks. ")
 
 def write(p, s):
-    os.makedirs(os.path.dirname(p), exist_ok=True); open(p, "w").write(s)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w") as fh:
+        fh.write(s)
 
 def main():
     ap = argparse.ArgumentParser()
@@ -46,7 +48,10 @@ def main():
           f"\n\n## High-write OLTP tier\nThe documented autovacuum_vacuum_cost_limit for this tier is {args.needle}.\n")
     # fillers
     for i in range(1, args.fillers + 1):
-        fd = (BIG * 5)[:args.filler_desc_chars] if args.filler_desc_chars > 40 else f"Unrelated filler topic {i}."
+        # M12: description length is monotonic in --filler-desc-chars across the WHOLE range
+        # (the old <=40 branch returned a fixed string, so the knob was inert below 41 and the
+        # printed cost lied). fd is now exactly filler_desc_chars characters.
+        fd = (BIG * 20)[:args.filler_desc_chars]
         write(os.path.join(sk, f"filler-{i:03d}", "SKILL.md"),
               f"---\nname: filler-{i:03d}\ndescription: Topic {i:03d}: {fd}\n---\n# filler {i}\nReply OK.\n")
     if args.budget_fraction is not None:

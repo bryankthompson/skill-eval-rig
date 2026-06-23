@@ -1,6 +1,6 @@
 # Findings — Claude Agent Skills behavior under stress
 
-Empirical map from driving the `claude` CLI (2.1.185) against synthetic skill fixtures, **Opus 4.8 (1M ctx)** and **Haiku 4.5**, ~250 trials total. Single-needle retrieval unless noted; N=4–5/cell. These characterize *mechanisms*, not a reliability guarantee — replicate on your own skills before quoting rates. Every number here was re-scored from raw transcripts; verdicts that hinge on token-presence were hand-verified (the substring scorer over-counts injection "wins" — see `score.py --attack`).
+Empirical map from driving the `claude` CLI (2.1.185) against synthetic skill fixtures, **Opus 4.8 (1M ctx)** and **Haiku 4.5**, ~250 trials total. Single-needle retrieval unless noted; N=4–5/cell. These characterize *mechanisms*, not a reliability guarantee — replicate on your own skills before quoting rates. Every number here was re-scored from raw transcripts (preserved privately — see `results/README.md`); verdicts that hinge on token-presence were hand-verified (the `--attack` scorer is robust to the substring over-count but a negation-adjacent compromise is a known hand-verify edge — see `score.py` / `tests/test_score.py`).
 
 ## The one-line throughline
 **The number/size/nesting/depth of reference files is *not* the binding constraint.** The scarce resources are (1) the **routing signal** (the always-loaded descriptions + the index/filenames) and (2) the **always-loaded listing budget**. And there is a sharp **model asymmetry**: the weaker model fails *confidently* on adversarial/misleading skill content exactly where the stronger model detects and refuses.
@@ -16,7 +16,7 @@ Empirical map from driving the `claude` CLI (2.1.185) against synthetic skill fi
 
 ## Where the line actually is
 - **Routing-signal quality** — identical 500-file corpus + query; flip the needle's index line from generic→discriminating: **0/5 → 5/5** on both models. Collapse needs *both* channels dead: an uninformative index AND a query lexically disjoint from the file body (a uniform index alone recovers via grep). Meaning-routing lives in the description/index; the body-search fallback is *lexical*.
-- **Listing budget** — `skillListingBudgetFraction`, **default 1% of context, char-denominated** (~30K chars on a 1M-ctx model; ~6× tighter on 200K). Over budget, descriptions are dropped **least-invoked-first** and **skill names are always kept** (documented: code.claude.com/docs/en/skills, anthropics/claude-code#56710).
+- **Listing budget** — `skillListingBudgetFraction`, **default 1% of context, char-denominated** (~30K chars on a 1M-ctx model; ~6× tighter on 200K). Over budget, descriptions are dropped **most-expensive-first** (the fattest descriptions are evicted first; lean ones resist) and **skill names are always kept** (documented: code.claude.com/docs/en/skills). The size/cost-based order is what we observed via `/doctor` and is consistent across the generator knobs (`--needle-desc-chars` / `--filler-desc-chars` only make sense under size-based eviction); an earlier draft said "least-invoked-first" — that was wrong.
 - **Activation cliff** (interactive only — `-p` resolves skills only via explicit `/name`) — a skill goes dark for auto-discovery, failing *silently* (confident wrong answer, no error), **only** when its description is dropped **and** its name is uninformative. A descriptive name survives the drop. Replicated n=3.
 
 ## The model asymmetry (the headline)
@@ -46,3 +46,9 @@ Empirical map from driving the `claude` CLI (2.1.185) against synthetic skill fi
 
 ## Honest limits
 Single-needle retrieval; N=4–5/cell; synthetic fixtures tuned to isolate mechanisms; the cross-skill/activation results are interactive and lower-N; "could not break Opus" ≠ "unbreakable" (we did not reach context-exhaustion or multi-turn manipulation).
+
+**Which rows the committed harness reproduces vs. exploratory.** `experiments/{selection,chaining,budget,adversarial,synthesis,precedence}.sh` reproduce the selection (incl. the 500-file disjoint-body 0/5↔5/5 contrast), chaining, budget, injection (5 framings), synthesis, and precedence rows; the activation / cross-skill rows are reproduced by the interactive `experiments/activation/` runbook + `prefill_report.py` (raw transcripts preserved privately). The **2-level hubs**, **tied ambiguity**, **context-retention / scale-dodge**, and **nav-by-semantic-filename** rows were *exploratory probes not yet in the committed harness* — treat them as directional until a committed script builds them.
+
+**Uncertainty.** Rates are point estimates at N=4–5/cell (n=3 for the adversarial/precedence cells), no fixed seed — reproductions vary; read them as mechanism characterizations, not precise rates.
+
+**Scope note.** The selection/chaining axes *force* the skill via `/skill` (retrieval); activation measures *auto-discovery*. The "routing signal is the constraint" throughline spans both, but they are different regimes — don't read a forced-retrieval rate as an activation rate.
