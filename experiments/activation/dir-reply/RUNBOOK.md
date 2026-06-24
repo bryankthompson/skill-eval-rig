@@ -1,5 +1,9 @@
 # Activation test — does `/dir-reply` auto-activate on email/reply requests?
 
+> **Scope:** this is the **command (`/dir-reply`) A/B** — the PR #2327 OLD-vs-REVISED description
+> experiment. **Sibling:** `../RUNBOOK.md` covers **skill** auto-activation — the synthetic
+> `vacuum-expert` / `ctx-policy-71` needle-`4200` budget/naming cliff probe.
+
 The interactive, gold-standard follow-up to PR #2327 (mcp-local-directory) — the test the
 headless `claude -p` probe **cannot** do (headless never auto-invokes a command; it only
 forced-selects). This measures the thing that actually failed in the 2026-06-23 Tableau miss:
@@ -32,7 +36,9 @@ command the model invoked** (look for `INVOKED /<name>`), or `none` if it answer
 straight for a raw tool.
 
 ## Battery + bar
-**Positives** (the bar: OLD *misses* dir-reply, REVISED *fires* it):
+**Positives** (where the description fix can move routing toward `/dir-reply` — but note OLD
+*already* name-routes the "reply…" framings, so the measurable gain is on the non-"reply"
+framings; see "Reading the result"):
 - "create this draft email in gmail"
 - "draft them an email"
 - "write a reply to Joe about his submission"
@@ -43,11 +49,32 @@ straight for a raw tool.
 - "this test is failing, fix it"           → expect `/dir-fix-tests`
 
 ## Reading the result
-- **Fix validated** ⇒ REVISED fires `/dir-reply` on ≥3/4 positives where OLD did not, AND REVISED
-  holds the negatives on their owners.
-- **Watch for** `/mcp-prime-dev-email` winning the email positives even under REVISED — if so, the
-  two descriptions still collide and `/dir-reply` may need a sharper "verified partner reply" edge
-  (a follow-up, tracked in status-db id 1441).
+**Headline finding:** the `/dir-reply` command **name** is itself a strong router — under the
+pre-#2327 (email-token-free) OLD description it *already* auto-fires `/dir-reply` on the "**reply**…"
+framings, purely on the name⇄"reply" match. So the description fix's measurable effect is on the
+framings the name can't reach (the non-"reply" email asks). A raw "≥3/4 gained" bar would mislabel
+a working fix, because some positives are at ceiling under OLD with no headroom for the description
+to move them.
+
+So the verdict scores **marginal gain over the OLD-dark denominator** — the positives OLD did *not*
+already route to `/dir-reply` — and a negative is **held** unless `/dir-reply` actually won it (a
+dark answer, the owner command, or any other command all count as held; only `/dir-reply` stealing
+a near-miss is a regression). This is what `score_battery` (in `drive_interactive.py`) computes; the
+buckets it returns (match the doc to the code — the code is the source of truth):
+
+- **`FIX VALIDATED`** — REVISED gains `/dir-reply` on **every** OLD-dark positive (full marginal
+  gain) **and** holds the negatives.
+- **`FIX EFFECTIVE (PARTIAL)`** — REVISED gains **some but not all** OLD-dark positives + holds negatives.
+- **`NO HEADROOM (OLD already name-routes all positives)`** — OLD already fires `/dir-reply` on
+  *all* positives via the name alone; the description delta is unmeasurable on this battery.
+- **`DESCRIPTION-DELTA UNTESTABLE`** — `/mcp-prime-dev-email` wins at least `⌊n/2⌋` of the positives
+  (floor — `max(1, n//2)` in the code; = half for the shipped 4-positive battery) under **both**
+  arms, masking the delta (the global competitor still collides — a `/dir-reply` "verified partner
+  reply" edge follow-up, tracked in status-db id 1441).
+- **`FIX FAILED / INCONCLUSIVE`** — REVISED gains **none** of the OLD-dark positives, **or** steals
+  a negative into `/dir-reply` (a stolen negative always overrides partial gain — `FIX EFFECTIVE
+  (PARTIAL)` requires the negatives held, so partial-gain-with-a-steal falls through to here).
+
 - **n is small + interactive** — run each prompt 2–3× if a result looks flaky; auto-activation is
   the documented silent-cliff axis (`reference_skill_eval_rig`), so a single trial is indicative,
   not definitive.

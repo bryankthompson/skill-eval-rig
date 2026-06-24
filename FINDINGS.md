@@ -67,6 +67,22 @@ broadening works exactly where the name can't reach. **Methodology note:** raw "
 mislabel this as a failure — gain must be scored over the OLD-*dark* denominator (positives OLD did
 not already name-route), which is what `score_battery` does.
 
+**Higher-N battery (`--repeats 3`, 36 trials, 3 invalid, claude 2.1.187):** the first battery was
+re-run at higher N and `score_battery` re-derived **FIX VALIDATED** — the same verdict, now firmer.
+The per-cell majority vote reproduced the first battery's shape exactly: OLD name-routes the two
+"**reply**…" positives (`write a reply to Joe` / `reply to the partner`, 3/3 each on the `/dir-reply`
+NAME alone) and is dark on the two non-"reply" framings; REVISED gains `/dir-reply` on **both**
+OLD-dark positives (`create this draft email` 2/3, `draft them an email` 2/2 valid) — **2/2 marginal
+gain** on the addressable set, OLD name-routes **2/4**. Both negatives held (`sync … gmail`→
+`/dir-email-sync` 3/3; `this test is failing`→dark 3/3 — a non-steal). Still **no
+`/mcp-prime-dev-email` collision** (the competitor is present in the global set but won no positive
+under either arm), so the verdict is a genuine `FIX VALIDATED`, not `DESCRIPTION-DELTA UNTESTABLE`.
+The stochasticity the axis is known for showed at the trial level (e.g. `create this draft email`
+under REVISED split 2 `/dir-reply` : 1 none), but the majority verdict is stable across N=24→36.
+This higher-N result is pinned to the scorer by the first-battery replay test
+(`tests/test_drive_interactive.py::ScoreBattery::test_first_battery_replay_is_validated`); the
+first-battery paragraph above is retained as the originally-documented run.
+
 
 
 ## The model asymmetry (the headline)

@@ -1,5 +1,9 @@
 # Activation experiment (INTERACTIVE — cannot be done headless)
 
+> **Scope:** this is the **synthetic SKILL auto-activation** cliff probe (the `vacuum-expert` /
+> `ctx-policy-71` needle-`4200` budget/naming experiment). **Sibling:** `dir-reply/RUNBOOK.md`
+> covers **command** (slash-command) auto-activation — the `/dir-reply` OLD-vs-REVISED A/B.
+
 `claude -p` resolves skills only via explicit `/skill-name`, so it never exercises *auto*-activation. To test whether a skill auto-fires — and whether that survives the listing budget — you must drive **interactive** sessions. This is the one axis automated CI cannot cover.
 
 **Needle:** the `vacuum-expert` (or opaque `ctx-policy-71`) skill's reference is the only place the value `4200` exists, so a `4200` answer proves the skill fired and was read. Any other number ⇒ it did not fire.
