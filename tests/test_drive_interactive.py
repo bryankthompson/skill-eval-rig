@@ -231,6 +231,36 @@ class ScoreBattery(unittest.TestCase):
         v = di.score_battery(self._battery(rev, old, neg))
         self.assertEqual(v["label"], "FIX VALIDATED")
 
+    def test_first_battery_replay_is_validated(self):
+        # REPLAY of the documented FIRST battery (the repo-root FINDINGS.md, "First battery result", N=24,
+        # claude 2.1.187): the live run that this scorer verdict pins. Uses the REAL battery
+        # prompt strings (not synthetic p1..p4) so this test is the cross-check for the FINDINGS
+        # paragraph. Documented outcome: OLD name-routes the two "reply…" framings on the
+        # /dir-reply NAME alone (2/4) and is dark on the two non-"reply" email framings; REVISED
+        # gains BOTH OLD-dark positives (2/2 marginal gain) + holds both negatives → FIX VALIDATED.
+        #
+        # Asserting ONLY the label would duplicate test_marginal_gain_over_old_dark_is_validated
+        # (score_battery never reads prompt TEXT — c["prompt"] is just a dict key). So this also
+        # pins the DOCUMENTED NUMBERS via the detail string (2/2 dark gained, 2/4 name-routed),
+        # which nothing else asserts — that is the non-redundant pin of the published result.
+        # This test ALWAYS pins the first battery; a higher-N re-run is recorded as a SEPARATE
+        # FINDINGS paragraph (and, if its verdict differs, a separate test) — never an edit here.
+        old = {"write a reply to Joe about his submission": "dir-reply",
+               "reply to the partner on this thread": "dir-reply",
+               "create this draft email in gmail": None,
+               "draft them an email": None}
+        rev = {p: "dir-reply" for p in old}
+        neg = {"sync my email tracking db with gmail": ("dir-email-sync", "dir-email-sync"),
+               "this test is failing, fix it": (None, "dir-fix-tests")}
+        v = di.score_battery(self._battery(rev, old, neg))
+        self.assertEqual(v["label"], "FIX VALIDATED")
+        self.assertIn("gained dir-reply on 2/2", v["detail"])
+        self.assertIn("OLD auto-routes 2/4 via the /dir-reply NAME", v["detail"])
+        # Also pin the documented "both negatives held" tail: the dark negative renders as
+        # held (→dark) on its owner, not stolen into /dir-reply (FINDINGS: "this test is
+        # failing→dark, a non-steal"). neg_detail truncates the prompt to 24 chars (p[:24]).
+        self.assertIn("→dark(want dir-fix-tests)", v["detail"])
+
     def test_no_headroom_when_old_routes_all_positives(self):
         # OLD already fires dir-reply on ALL positives (name alone) → description delta unmeasurable.
         pos = ["p1", "p2", "p3", "p4"]
