@@ -12,7 +12,7 @@ Run it at the END of the session (after you've run the xskill-validate tasks):
     python3 prefill_report.py [--since-hours 12]
 Prints a filled report to stdout and writes /tmp/xskill-validation-report.md.
 """
-import argparse, json, os, glob, time
+import argparse, json, os, glob, time, re
 
 HOME = os.path.expanduser("~")
 PROJ = os.path.join(HOME, ".claude", "projects")
@@ -105,6 +105,68 @@ def analyze_session(path, token, target, marker):
             token_hit = (token in a) or (token in blob)   # answer text OR a tool span carrying it
             return (fired, fired_skill, target_engaged, token_hit)
     return None  # no natural-prompt turn found in this session
+
+# ---------------------------------------------------------------------------
+# Command auto-activation detection (the interactive activation axis — the slash-command
+# analog of analyze_session's skill detection). Powers experiments/activation/drive_interactive.py.
+#
+# Phase-0-captured schema (a real spike transcript, not a guess): when the model AUTO-invokes a
+# slash command, it surfaces as a `Skill` tool_use whose input names the command (NO `SlashCommand`
+# tool_use is ever emitted) —
+#     {"type":"tool_use","name":"Skill","input":{"skill":"dir-reply"},"caller":{"type":"direct"}}
+# and our activation-fixture stubs additionally reply `INVOKED /<name>` in assistant text. The
+# INVOKED reply is the PRIMARY signal (fully under our control, certain to appear); the `Skill`
+# tool_use's input.skill is the corroborating one. (`turns()` already captures the Skill tool_use
+# as ("Skill", '{"skill":"..."}') and folds skill-injection/tool-result 'user' lines.)
+def _is_forced_command(u):
+    """True if a 'user' turn is a FORCED slash-command invocation, not a natural prompt. Covers
+    BOTH the literal leading-'/' form AND the interactive REPL serialization, which wraps a typed
+    /command as <command-message>…</command-message> / <command-name>/foo</command-name> (the
+    `startswith('/')` guard alone does NOT catch that — verified against real transcripts)."""
+    s = (u or "").lstrip()
+    return s.startswith("/") or ("<command-name>" in s) or ("<command-message>" in s)
+
+def detect_invocation(path):
+    """Inspect the FIRST genuine natural-prompt turn (by POSITION — the activation battery runs
+    exactly one natural prompt per fresh session, so position is safer than a prompt-text marker
+    that can echo inside a tool span) and report which slash-command, if any, AUTO-fired.
+
+    Returns {name, invoked, skill, mismatch, natural_prompt}:
+      invoked  — command name from the stub's `INVOKED /<name>` assistant reply (PRIMARY surface)
+      skill    — command name from a `Skill` tool_use's input.skill (corroborating surface)
+      name     — the winning command (PRIMARY wins; falls back to skill), or None if it went dark
+      mismatch — True if both surfaces fired but disagree (a real divergence worth surfacing)
+    """
+    nat = None
+    for u, a, tools in turns(path):
+        if _is_forced_command(u):
+            continue
+        nat = (u, a, tools); break
+    if nat is None:
+        return {"name": None, "invoked": None, "skill": None, "mismatch": False, "natural_prompt": None}
+    u, a, tools = nat
+    # Anchor to the command-name charset (not \S+ then strip-punctuation): sidesteps trailing
+    # `)`/`]`/`,` after the name (e.g. "INVOKED /dir-reply)") with no strip-set to maintain.
+    m = re.search(r"INVOKED\s+/([A-Za-z0-9_-]+)", a or "")
+    invoked = m.group(1) if m else None
+    skill = None
+    for nm, inp in tools:
+        if nm == "Skill":
+            try:
+                skill = (json.loads(inp) or {}).get("skill")
+            except Exception:
+                skill = None
+            if skill:
+                break
+    mismatch = bool(invoked and skill and invoked != skill)
+    return {"name": invoked or skill, "invoked": invoked, "skill": skill,
+            "mismatch": mismatch, "natural_prompt": u}
+
+def invoked_command(path):
+    """The slash-command the model AUTO-invoked on the natural-prompt turn (no leading slash),
+    or None if it went dark / answered in prose. Thin accessor over detect_invocation()."""
+    return detect_invocation(path)["name"]
+
 
 def main():
     ap = argparse.ArgumentParser()
