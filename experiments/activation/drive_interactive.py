@@ -310,7 +310,12 @@ def score_battery(cells):
     def winners(arm, kind):
         return {c["prompt"]: c["winner"] for c in cells if c["arm"] == arm and c["kind"] == kind}
     old_pos, rev_pos = winners("OLD", "positive"), winners("REVISED", "positive")
-    rev_neg = {c["prompt"]: (c["winner"], c["expected_owner"])
+    # expected_owner is the ONLY optional negative-cell field — arm/kind/prompt/winner are always
+    # set (driver lines 268/278, _cell), so the sibling bracket-reads here stay bare on purpose.
+    # .get(...,"?") renders a defensive sentinel for a SYNTHETIC/future negative recorded without an
+    # owner; it is render-only (flows solely into neg_detail), never re-entering the cells. No shipped
+    # battery omits the key, so every verdict label and the detail string are unchanged.
+    rev_neg = {c["prompt"]: (c["winner"], c.get("expected_owner", "?"))
                for c in cells if c["arm"] == "REVISED" and c["kind"] == "negative"}
 
     # OLD-dark = the addressable set: positives OLD did NOT already route to dir-reply.
