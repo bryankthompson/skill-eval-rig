@@ -5,6 +5,8 @@ explicit pass policy, computes per-cell reliability, and prints a slice report. 
 runtime — purely additive, downstream of the --json artifact.
 
   python3 evaluate.py --in run.json [--target dir-reply] [--floor 0.8]
+  python3 evaluate.py --in run.json --schemas tools.json   # activate the SchemaGrader
+  python3 evaluate.py --in run.json --rubric judge.txt      # activate the LLMJudgeGrader (live claude -p)
 """
 import argparse
 import json
@@ -18,7 +20,7 @@ from slices import Slice, slice_report
 ENSEMBLE = [G.CommandGrader(), G.NoErrorGrader(), G.SchemaGrader(), G.LLMJudgeGrader()]
 
 
-def evaluate(run, graders=ENSEMBLE, target="dir-reply", floor=0.8):
+def evaluate(run, graders=ENSEMBLE, target="dir-reply", floor=0.8, targets=None):
     per_cell_votes, all_votes = [], []
     for cell in run["cells"]:
         votes = []
@@ -31,7 +33,7 @@ def evaluate(run, graders=ENSEMBLE, target="dir-reply", floor=0.8):
         per_cell_votes.append(votes)
 
     reliab = LM.estimate_reliability(all_votes)
-    targets = {"command": target, "no_error": "ok"}   # explicit pass policy; tune per battery
+    targets = targets or {"command": target, "no_error": "ok"}   # explicit pass policy; tune per battery
     for cell, votes in zip(run["cells"], per_cell_votes):
         passes = [LM.pass_policy(LM.trial_verdict(v, reliab), targets) for v in votes]
         cell["reliability"] = LM.cell_reliability(passes)
@@ -50,10 +52,27 @@ def main():
     ap.add_argument("--in", dest="inp", required=True)
     ap.add_argument("--target", default="dir-reply")
     ap.add_argument("--floor", type=float, default=0.8)
+    ap.add_argument("--schemas", help="JSON file {tool_name: input_schema} → activates SchemaGrader")
+    ap.add_argument("--rubric", help="text file with a judge rubric → activates LLMJudgeGrader (live)")
+    ap.add_argument("--judge-model", dest="judge_model", help="model for the judge (default: CLI default)")
     a = ap.parse_args()
     with open(a.inp) as fh:
         run = json.load(fh)
-    rep = evaluate(run, target=a.target, floor=a.floor)
+
+    # Build the ensemble + pass policy from what's configured. Schema/judge join only when given a
+    # schema set / rubric, so a bare run grades on the two deterministic graders and makes no calls.
+    graders = [G.CommandGrader(), G.NoErrorGrader()]
+    targets = {"command": a.target, "no_error": "ok"}
+    if a.schemas:
+        with open(a.schemas) as fh:
+            graders.append(G.SchemaGrader(json.load(fh)))
+        targets["schema"] = "ok"
+    if a.rubric:
+        with open(a.rubric) as fh:
+            graders.append(G.LLMJudgeGrader(fh.read(), a.judge_model))
+        targets["quality"] = "pass"
+
+    rep = evaluate(run, graders=graders, floor=a.floor, targets=targets)
     print("estimated grader reliability:", {k: round(v, 2) for k, v in rep["reliability"].items()})
     for s in rep["slices"]:
         print(f"  {s['slice']:16} mean={s['mean_rate']} n={s['n_cells']}"

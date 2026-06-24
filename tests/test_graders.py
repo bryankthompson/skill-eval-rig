@@ -1,18 +1,36 @@
 #!/usr/bin/env python3
 """Pins for the grading seam (graders.py / label_model.py / slices.py). Pure functions, no live
 claude — runs under `make test` exactly like the other CI-safe tests."""
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from graders import Vote, DARK                      # noqa: E402
-import label_model as LM                            # noqa: E402
-from slices import Slice, slice_report              # noqa: E402
+from graders import Vote, DARK, SchemaGrader, LLMJudgeGrader   # noqa: E402
+import label_model as LM                                       # noqa: E402
+from slices import Slice, slice_report                         # noqa: E402
 
 
 def _v(question, grader, vote, conf=1.0):
     return Vote(question=question, vote=vote, confidence=conf, grader=grader)
+
+
+def _tx(lines):
+    fd, p = tempfile.mkstemp(suffix=".jsonl")
+    with os.fdopen(fd, "w") as fh:
+        for ev in lines:
+            fh.write(json.dumps(ev) + "\n")
+    return p
+
+
+def _A(text):
+    return {"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}}
+
+
+def _TU(name, inp):
+    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": name, "input": inp}]}}
 
 
 class Aggregate(unittest.TestCase):
@@ -91,6 +109,86 @@ class Slices(unittest.TestCase):
                     Slice("arm:REVISED", lambda c: c["arm"] == "REVISED")], floor=0.8)}
         self.assertTrue(rep["arm:OLD"]["below_floor"])
         self.assertFalse(rep["arm:REVISED"]["below_floor"])
+
+
+SCHEMA = {"send_email": {"type": "object", "required": ["to", "subject"],
+                         "properties": {"to": {"type": "string"},
+                                        "kind": {"enum": ["draft", "send"]}}}}
+
+
+class SchemaLive(unittest.TestCase):
+    def setUp(self):
+        self.g = SchemaGrader(SCHEMA)
+
+    def test_valid_is_ok(self):
+        p = _tx([_TU("send_email", {"to": "joe@x.com", "subject": "hi", "kind": "draft"})])
+        self.assertEqual(self.g.grade(p, {}).vote, "ok")
+
+    def test_missing_required_is_invalid(self):
+        p = _tx([_TU("send_email", {"to": "joe@x.com"})])   # no subject
+        self.assertEqual(self.g.grade(p, {}).vote, "invalid")
+
+    def test_wrong_type_is_invalid(self):
+        p = _tx([_TU("send_email", {"to": 123, "subject": "hi"})])
+        self.assertEqual(self.g.grade(p, {}).vote, "invalid")
+
+    def test_enum_violation_is_invalid(self):
+        p = _tx([_TU("send_email", {"to": "j", "subject": "hi", "kind": "archive"})])
+        self.assertEqual(self.g.grade(p, {}).vote, "invalid")
+
+    def test_unconfigured_tool_abstains(self):
+        # A tool_use with no schema is "nothing to check", not a failure.
+        self.assertTrue(self.g.grade(_tx([_TU("other_tool", {"x": 1})]), {}).abstain)
+
+    def test_no_tool_use_abstains(self):
+        self.assertTrue(self.g.grade(_tx([_A("just prose, no tool call")]), {}).abstain)
+
+    def test_no_schemas_abstains(self):
+        self.assertTrue(SchemaGrader().grade(_tx([_TU("send_email", {})]), {}).abstain)
+
+
+class JudgeLive(unittest.TestCase):
+    """The live judge with an INJECTED fake runner — no live `claude` call, so CI stays offline."""
+    def _drafted(self):
+        return _tx([_A("Here is a draft email you can send: Hi Joe, ...")])
+
+    def test_pass_with_confidence(self):
+        g = LLMJudgeGrader("did it draft an email?",
+                           runner=lambda p, m: '{"verdict":"pass","confidence":0.8}')
+        v = g.grade(self._drafted(), {"prompt": "draft an email"})
+        self.assertEqual(v.vote, "pass")
+        self.assertAlmostEqual(v.confidence, 0.8)
+
+    def test_fail(self):
+        g = LLMJudgeGrader("r", runner=lambda p, m: '{"verdict":"fail","confidence":0.6}')
+        self.assertEqual(g.grade(self._drafted(), {}).vote, "fail")
+
+    def test_unparseable_abstains(self):
+        g = LLMJudgeGrader("r", runner=lambda p, m: "I really cannot decide either way.")
+        self.assertTrue(g.grade(self._drafted(), {}).abstain)
+
+    def test_no_rubric_abstains(self):
+        # Abstains before the runner is ever consulted.
+        self.assertTrue(LLMJudgeGrader(runner=lambda p, m: "x").grade(self._drafted(), {}).abstain)
+
+    def test_no_output_to_judge_abstains(self):
+        g = LLMJudgeGrader("r", runner=lambda p, m: '{"verdict":"pass"}')
+        self.assertTrue(g.grade(_tx([{"type": "user", "message": {"content": "hi"}}]), {}).abstain)
+
+    def test_runner_error_abstains(self):
+        def boom(p, m):
+            raise RuntimeError("network down")
+        self.assertTrue(LLMJudgeGrader("r", runner=boom).grade(self._drafted(), {}).abstain)
+
+    def test_runner_sees_rubric_and_output(self):
+        seen = {}
+
+        def cap(prompt, model):
+            seen["prompt"] = prompt
+            return '{"verdict":"pass","confidence":0.5}'
+        LLMJudgeGrader("rubric-X", runner=cap).grade(self._drafted(), {"prompt": "draft"})
+        self.assertIn("rubric-X", seen["prompt"])
+        self.assertIn("draft email you can send", seen["prompt"])
 
 
 if __name__ == "__main__":
