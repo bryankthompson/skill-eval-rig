@@ -172,7 +172,7 @@ class InvokedCommand(unittest.TestCase):
 class ScoreBattery(unittest.TestCase):
     def _cell(self, arm, kind, prompt, winner, owner=None):
         c = {"arm": arm, "kind": kind, "prompt": prompt, "winner": winner}
-        if owner:
+        if owner is not None:
             c["expected_owner"] = owner
         return c
 
@@ -310,6 +310,34 @@ class ScoreBattery(unittest.TestCase):
         v = di.score_battery(self._battery(rev, old, neg))
         self.assertNotEqual(v["label"], "DESCRIPTION-DELTA UNTESTABLE")
         self.assertEqual(v["label"], "FIX EFFECTIVE (PARTIAL)")
+
+    def test_missing_expected_owner_does_not_crash_and_is_held(self):
+        # Latent footgun deferred from PR #6 — a SYNTHETIC/future shape (no shipped battery omits
+        # expected_owner; every NEGATIVES entry carries an owner). Pins THREE things the existing
+        # tests don't:
+        #   (1) a negative whose expected_owner KEY IS OMITTED (not merely winner-dark, as
+        #       test_neg_dark_is_held covers) must not KeyError in score_battery and is still HELD,
+        #   (2) _cell preserves an explicitly-empty owner (the is-not-None guard), and
+        #   (3) that "" owner survives _cell→score_battery end-to-end.
+        # Each mutation is caught by a DIFFERENT line below: the score_battery bracket-read revert
+        # ERRORS on the first call (KeyError), so it never reaches the assertions.
+        rev = {"p1": "dir-reply", "p2": "dir-reply"}
+        old = {"p1": None, "p2": None}
+        neg = {"n1": (None, None)}            # winner dark, owner None → expected_owner key OMITTED
+        v = di.score_battery(self._battery(rev, old, neg))   # ← bracket-read revert KeyErrors HERE
+        self.assertEqual(v["label"], "FIX VALIDATED")        # sane verdict: both OLD-dark gained + neg held
+        self.assertIn("(want ?)", v["detail"])               # pins the .get("?") SENTINEL LITERAL in neg_detail
+        # fix half #2 — _cell keeps an explicit "" owner (revert to `if owner:` → key dropped → None != "").
+        self.assertEqual(self._cell("REVISED", "negative", "n", "x", owner="").get("expected_owner"), "")
+        # integration pin: an explicit "" owner survives _cell→score_battery and renders "(want )",
+        # NOT the "(want ?)" sentinel (revert _cell → key dropped → .get default → "(want ?)" → fails).
+        v2 = di.score_battery(self._battery({"q1": "dir-reply"}, {"q1": None}, {"m1": (None, "")}))
+        self.assertIn("(want )", v2["detail"])
+        # neg_held is owner-AGNOSTIC: a STOLEN negative (winner=dir-reply) with "" owner is still a
+        # steal → FIX FAILED, and the sentinel/empty owner also renders in the FAIL branch ("→dir-reply(want )").
+        v3 = di.score_battery(self._battery({"q1": "dir-reply"}, {"q1": None}, {"m1": ("dir-reply", "")}))
+        self.assertEqual(v3["label"], "FIX FAILED / INCONCLUSIVE")
+        self.assertIn("(want )", v3["detail"])
 
 
 class DriverHelpers(unittest.TestCase):
