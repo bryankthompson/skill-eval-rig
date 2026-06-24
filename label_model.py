@@ -15,8 +15,8 @@ same question are redundant noisy voters); combining ACROSS questions is pass_po
 
 CAVEAT (in code, not just docs): aggregate/estimate_reliability assume graders err INDEPENDENTLY
 given the truth. A clique of correlated graders all agree, so estimate_reliability upweights them
-and aggregate double-counts them → false confidence. Real Snorkel iterates and models labeling-
-function correlations; this does neither. Use diverse graders per question; treat the estimated
+and aggregate double-counts them → false confidence. A full label model would iterate and model
+inter-grader correlations; this does neither. Use diverse graders per question; treat the estimated
 reliability as a prior to override, not gospel."""
 import math
 from collections import defaultdict
