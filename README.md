@@ -12,13 +12,13 @@ It exercises four axes:
 | **selection** | find the 1 right file among N | headless | scales to 1000 files **iff routing signal is good**; uniform index + non-lexical query → **collapses (0/5)** |
 | **chaining** | reach a file *through* other files | headless | **never broke** to 10 hops + oversized files (the spec's `head -100` partial-read didn't reproduce) |
 | **budget** | the always-loaded listing limit | headless (structural) | `skillListingBudgetFraction`, default **1% of context, char-denominated** (~30K chars on a 1M-context model) |
-| **activation** | does a skill *auto*-fire, and survive truncation | **interactive only** | dies *silently* only when description dropped **and** name uninformative |
+| **activation** | does a skill/command *auto*-fire, and survive truncation | **interactive** (now automated, pty) | dies *silently* only when description dropped **and** name uninformative |
 
 ## The one thing to know first: headless vs interactive
 
 - `claude -p` (headless) can drive **selection, chaining, and budget** — and it *can* produce real failures (the selection collapse is headless).
-- `claude -p` **cannot test auto-activation** — in `-p` mode skills resolve only via explicit `/skill-name`, so the model never decides on its own to invoke one. The activation axis therefore needs **interactive** sessions (`experiments/activation/`, driven by a VS Code `tasks.json` + a human-in-the-loop runbook).
-- **Implication for your own CI:** automated eval will silently miss the activation cliff. Budget pressure that drops a skill's description can make it stop auto-firing, and headless tests won't catch it.
+- `claude -p` **cannot test auto-activation** — in `-p` mode skills resolve only via explicit `/skill-name`, so the model never decides on its own to invoke one. The activation axis therefore needs **interactive** sessions. These are now driven **automatically** via a pty (`experiments/activation.sh` → `drive_interactive.py`); the older human-in-the-loop VS Code `tasks.json` + `experiments/activation/dir-reply/RUNBOOK.md` remain as the manual protocol the driver automates.
+- **Implication for your own CI:** automated *headless* eval will silently miss the activation cliff. Budget pressure that drops a skill's description can make it stop auto-firing, and `-p` tests won't catch it — you need an interactive pty driver (this is what `experiments/activation.sh` provides). The pty driver still costs real interactive sessions, so it is not free like the structural probes.
 
 ## Quick start
 ```
@@ -40,8 +40,11 @@ bash experiments/synthesis.sh
 # precedence: skill vs CLAUDE.md vs user — the instruction hierarchy
 bash experiments/precedence.sh
 
-# activation + cross-skill handoff: interactive — see experiments/activation/RUNBOOK.md
-#   prefill_report.py scrapes the interactive transcripts so you don't hand-transcribe results
+# activation (auto-fire): AUTOMATED interactive pty driver over the dir-reply OLD/REVISED A/B
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # one-time (pexpect)
+#   bash experiments/activation.sh --smoke      # fast e2e: 1 positive × REVISED
+#   bash experiments/activation.sh              # full battery (~24-36 paid interactive sessions)
+#   (manual fallback: experiments/activation/dir-reply/RUNBOOK.md; prefill_report.py scrapes transcripts)
 ```
 
 **Read the results:** `FINDINGS.md` is the full map across all axes (incl. the Opus/Haiku
