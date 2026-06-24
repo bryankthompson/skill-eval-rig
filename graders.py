@@ -15,6 +15,7 @@ both found while reviewing the first design:
 Diversity is the point: a deterministic check, a transcript regex, and an LLM judge make
 somewhat-independent errors — the assumption label_model rests on. Five LLM judges are NOT diverse."""
 import json
+import math
 import os
 from dataclasses import dataclass
 from typing import Optional, Protocol, runtime_checkable
@@ -187,11 +188,23 @@ def _judge_prompt(rubric, user_prompt, output):
 
 
 def _balanced_objects(text):
-    """Yield each OUTERMOST brace-balanced {...} substring, so a nested object can never shadow its
-    parent — the shallow-regex bug where `{"verdict":"pass","x":{"verdict":"fail"}}` read as fail."""
+    """Yield each OUTERMOST brace-balanced {...} substring, STRING/escape-aware so a brace inside a
+    JSON string value can't mis-split the span — letting a nested object never shadow its parent
+    (the shallow-regex bug where `{"verdict":"pass","x":{"verdict":"fail"}}` read as fail)."""
     depth = start = 0
+    in_str = esc = False
     for i, ch in enumerate(text):
-        if ch == "{":
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
             if depth == 0:
                 start = i
             depth += 1
@@ -225,6 +238,8 @@ def _parse_judge(raw):
             if v in ("pass", "fail"):
                 try:
                     c = float(d.get("confidence", 0.5))
+                    if not math.isfinite(c):
+                        c = 0.5
                 except Exception:
                     c = 0.5
                 return v, _clip01(c)

@@ -31,9 +31,10 @@ def _clamp(x, lo, hi):
 
 
 def _conf(c):
-    """A vote's self-confidence, defended: None/bool/non-numeric → DEFAULT_RELIABILITY, else clamped
-    to [0,1]. A single malformed vote must not crash aggregate (and thus the whole run)."""
-    if isinstance(c, bool) or not isinstance(c, (int, float)):
+    """A vote's self-confidence, defended: None/bool/non-numeric/non-finite → DEFAULT_RELIABILITY,
+    else clamped to [0,1]. A malformed vote must neither crash aggregate nor (via NaN/inf clamping
+    to 1.0) silently weight itself to maximum reliability."""
+    if isinstance(c, bool) or not isinstance(c, (int, float)) or not math.isfinite(c):
         return DEFAULT_RELIABILITY
     return _clamp(float(c), 0.0, 1.0)
 

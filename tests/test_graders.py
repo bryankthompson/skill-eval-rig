@@ -19,8 +19,12 @@ def _v(question, grader, vote, conf=1.0):
     return Vote(question=question, vote=vote, confidence=conf, grader=grader)
 
 
+_TMP = []
+
+
 def _tx(lines):
     fd, p = tempfile.mkstemp(suffix=".jsonl")
+    _TMP.append(p)
     with os.fdopen(fd, "w") as fh:
         for ev in lines:
             fh.write(json.dumps(ev) + "\n")
@@ -44,6 +48,14 @@ def _ERR(tuid="t1"):
                                                      "is_error": True, "content": "boom"}]}}
 
 
+def tearDownModule():
+    for p in _TMP:
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+
+
 class Aggregate(unittest.TestCase):
     def test_all_abstain_is_none(self):
         self.assertEqual(LM.aggregate([Vote.no_opinion("q"), Vote.no_opinion("q")])[0], None)
@@ -61,8 +73,15 @@ class Aggregate(unittest.TestCase):
         self.assertEqual(LM.aggregate(votes, reliab)[0], "pass")
 
     def test_low_self_confidence_is_discounted(self):
-        votes = [_v("q", "a", "pass", conf=0.1), _v("q", "b", "fail", conf=1.0)]
-        self.assertEqual(LM.aggregate(votes)[0], "fail")
+        # Labels chosen so a naive equal-weight tie would resolve to 'fail' (lexical) — only genuine
+        # confidence discounting lets the high-confidence 'pass' win.
+        votes = [_v("q", "a", "fail", conf=0.1), _v("q", "b", "pass", conf=1.0)]
+        self.assertEqual(LM.aggregate(votes)[0], "pass")
+
+    def test_tie_breaks_lexicographically(self):
+        # Pins the documented tie-break: equal-weight votes resolve to the lexicographically-first
+        # class ('fail' < 'pass'). Load-bearing for the discounting test above.
+        self.assertEqual(LM.aggregate([_v("q", "a", "pass"), _v("q", "b", "fail")])[0], "fail")
 
 
 class PerQuestion(unittest.TestCase):
@@ -244,6 +263,14 @@ class JudgeNestedJSON(unittest.TestCase):
         g = LLMJudgeGrader("r", runner=lambda p, m: 'Reasoning… final: {"verdict":"fail","confidence":0.7}')
         self.assertEqual(g.grade(_tx([_A("x")]), {}).vote, "fail")
 
+    def test_brace_in_string_value_keeps_clean_object(self):
+        # Review M2: a '}' inside a JSON string value must not truncate the span. Pre-fix this aborted
+        # to abstain (both 'pass' and 'fail' words present); the string-aware scanner keeps it intact.
+        raw = 'judging: {"verdict":"pass","note":"not a fail }, fine","confidence":0.8} done'
+        v = LLMJudgeGrader("r", runner=lambda p, m: raw).grade(_tx([_A("draft")]), {})
+        self.assertEqual(v.vote, "pass")
+        self.assertAlmostEqual(v.confidence, 0.8)
+
 
 class AggregateGuards(unittest.TestCase):
     def test_vote_outside_explicit_classes_does_not_crash(self):
@@ -253,6 +280,14 @@ class AggregateGuards(unittest.TestCase):
     def test_non_numeric_confidence_does_not_crash(self):
         # Review Medium #3: None/garbage confidence falls back to the default, no TypeError.
         self.assertEqual(LM.aggregate([Vote(question="q", vote="a", confidence=None, grader="g")])[0], "a")
+
+    def test_nonfinite_confidence_does_not_dominate(self):
+        # Review M1: a NaN confidence must fall back to the default reliability, not clamp to 1.0 and
+        # let a low-trust vote win. Pre-fix 'junk' (NaN→1.0) beats 'good'; post-fix they tie and the
+        # lexical tie-break picks 'good' ('good' < 'junk').
+        votes = [Vote(question="q", vote="junk", confidence=float("nan"), grader="g1"),
+                 Vote(question="q", vote="good", confidence=0.6, grader="g2")]
+        self.assertEqual(LM.aggregate(votes)[0], "good")
 
 
 class EvaluateE2E(unittest.TestCase):
