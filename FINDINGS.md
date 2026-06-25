@@ -23,8 +23,7 @@ Empirical map from driving the `claude` CLI (2.1.185) against synthetic skill fi
 The activation axis above was interactive + human-in-the-loop. It is now **automated** via a pty
 driver (`experiments/activation.sh` → `experiments/activation/drive_interactive.py`): it drives real
 interactive `claude` sessions, types a natural prompt, and scores which slash command (if any) the
-model auto-invoked — over an OLD/REVISED A/B of the `/dir-reply` description (the mcp-local-directory
-PR #2327 fix; status-db id 1441). It reuses `prefill_report.py`'s transcript parsing (no second
+model auto-invoked — over an OLD/REVISED A/B of the `/dir-reply` description (the OLD→REVISED description change). It reuses `prefill_report.py`'s transcript parsing (no second
 scraper). These are the load-bearing mechanics of driving interactive `claude` programmatically,
 each settled by a live Phase-0 spike *before* the driver was built:
 
@@ -56,13 +55,13 @@ each settled by a live Phase-0 spike *before* the driver was built:
 
 **First battery result (OLD vs REVISED `/dir-reply`, 24 trials, claude 2.1.187, 1 infra timeout):**
 **FIX VALIDATED on its addressable set.** The headline subtlety the run surfaced: **the command
-NAME `/dir-reply` is itself a strong router** — under the *pre-#2327* description (zero email/gmail
+NAME `/dir-reply` is itself a strong router** — under the *OLD (original)* description (zero email/gmail
 tokens) OLD *already* auto-fires `/dir-reply` on the two "**reply**…" positives ("write a reply to
 Joe", "reply to the partner"), purely on the name⇄"reply" match. REVISED gained `/dir-reply` on
 **both** positives OLD actually missed — the non-"reply" email framings ("create this draft email",
 "draft them an email") — i.e. **2/2 marginal gain** on the addressable set, while OLD name-routes
 2/4. Both negatives held (`sync … gmail`→`/dir-email-sync`; `this test is failing`→dark, a
-non-steal). No `/mcp-prime-dev-email` collision occurred (it won no positive). So the #2327
+non-steal). No `/mcp-prime-dev-email` collision occurred (it won no positive). So the description
 broadening works exactly where the name can't reach. **Methodology note:** raw "≥3/4 gained" would
 mislabel this as a failure — gain must be scored over the OLD-*dark* denominator (positives OLD did
 not already name-route), which is what `score_battery` does.

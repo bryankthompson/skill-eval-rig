@@ -5,5 +5,5 @@ argument-hint: <empty for full sync, "org-name" to sync one org, "dry-run" to pr
 
 # /dir-email-sync
 
-(Activation-test stub — routing fixture only. Real command lives in mcp-local-directory.)
+(Activation-test stub — routing fixture only. Real command lives in the operator's private MCP-directory tooling repo.)
 If you were invoked, reply: "INVOKED /dir-email-sync" and stop.

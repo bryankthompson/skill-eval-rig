@@ -5,5 +5,5 @@ argument-hint: <empty/"queue" to plan, "status" for the board, "<slug>" to scope
 
 # /dir-plugin-outreach
 
-(Activation-test stub — routing fixture only. Real command lives in mcp-local-directory.)
+(Activation-test stub — routing fixture only. Real command lives in the operator's private MCP-directory tooling repo.)
 If you were invoked, reply: "INVOKED /dir-plugin-outreach" and stop.

@@ -76,7 +76,7 @@ class InvokedCommand(unittest.TestCase):
         self.assertEqual(det["skill"], "dir-reply")
 
     def test_competitor_surfaces(self):
-        # The /mcp-prime-dev-email collision MUST surface as the winning name (id 1441), not as a
+        # The /mcp-prime-dev-email collision MUST surface as the winning name, not as a
         # bare dir-reply yes/no.
         p = self._w("c.jsonl", [
             _user("draft them an email"),

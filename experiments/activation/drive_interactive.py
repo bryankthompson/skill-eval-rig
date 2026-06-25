@@ -29,8 +29,8 @@ sys.path.insert(0, ROOT)
 import prefill_report as pr  # noqa: E402  (reuse turns()/invoked_command — no second scraper)
 
 PROJ = os.path.join(os.path.expanduser("~"), ".claude", "projects")
-FIX_REVISED = os.path.join(HERE, "dir-reply")        # merged-#2327 description
-FIX_OLD = os.path.join(HERE, "dir-reply-old")        # pre-#2327 description
+FIX_REVISED = os.path.join(HERE, "dir-reply")        # REVISED description
+FIX_OLD = os.path.join(HERE, "dir-reply-old")        # OLD (original) description
 
 # Battery (from dir-reply/RUNBOOK.md). Negatives carry their expected owner; both run under BOTH
 # arms so the A/B "globals cancel" logic has the paired baseline to attribute a hold/steal to.
@@ -296,11 +296,11 @@ def score_battery(cells):
 
     The honest measure of a DESCRIPTION change is its MARGINAL effect: gain is only possible on the
     positives OLD did not ALREADY auto-fire. The `/dir-reply` command NAME alone routes "reply…"
-    prompts even under the pre-#2327 (email-token-free) description, so those are at ceiling under
+    prompts even under the original (OLD, email-token-free) description, so those are at ceiling under
     OLD with no headroom for the description to move — counting them as "not gained" would
     mislabel a working fix. So gain is scored over the OLD-DARK denominator (positives OLD missed),
     not all positives. Buckets:
-      untestable    — /mcp-prime-dev-email wins ≥half the positives under BOTH arms (masks the delta; id 1441).
+      untestable    — /mcp-prime-dev-email wins ≥half the positives under BOTH arms (masks the delta).
       no-headroom   — OLD already auto-fires dir-reply on ALL positives (the NAME routes them); the
                       description delta is unmeasurable on this battery.
       fix-validated — REVISED gains dir-reply on EVERY OLD-dark positive (full marginal gain) + holds negatives.
@@ -334,7 +334,7 @@ def score_battery(cells):
     if rev_pos and len(comp_both) >= max(1, len(rev_pos) // 2):
         return {"label": "DESCRIPTION-DELTA UNTESTABLE",
                 "detail": f"/mcp-prime-dev-email wins {len(comp_both)}/{len(rev_pos)} positives under "
-                          f"BOTH arms — the global competitor masks the description change (id 1441). "
+                          f"BOTH arms — the global competitor masks the description change. "
                           f"Negatives: {neg_detail}"}
     if rev_pos and not old_dark:
         return {"label": "NO HEADROOM (OLD already name-routes all positives)",
