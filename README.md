@@ -61,6 +61,45 @@ Pass a single model to the headless scripts to halve the runs, e.g. `experiments
 
 **Point it at your real skills:** drop your skill folders into a project's `.claude/skills/`, then use `run_trials.sh` + `score.py` with your own questions/needles. The generators are only for controlled synthetic conditions.
 
+## Grading layer (optional)
+`score.py` is one hand-written scorer per axis. When "did it work?" is more than a single check —
+testing plugins/skills, or measuring *reliability across repeats* rather than one-shot correctness —
+an optional layer turns transcripts into calibrated pass-rates and a per-slice failure map. It runs
+**downstream of a run's `--json` artifact**, so the runtime (`run_trials.sh` /
+`experiments/activation/drive_interactive.py`) is untouched.
+
+Pieces — `graders.py`, `label_model.py`, `slices.py`, `evaluate.py`:
+- **Graders** (the `Grader` protocol) each read one transcript and emit a `Vote {question, vote,
+  confidence, abstain}` on a single *question*. Shipped: `CommandGrader` (which command auto-fired —
+  a dark trial is the label `(none)`, not an abstention), `NoErrorGrader` (did a `tool_result` come
+  back `is_error`), `SchemaGrader` (validate `tool_use` inputs against per-tool JSON schemas — a
+  stdlib subset), `LLMJudgeGrader` (judge the final output against a rubric via headless `claude -p`;
+  the runner is injectable so tests stay offline).
+- **Per-question aggregation** (`label_model`) — votes combine *within* a question (a
+  confidence/reliability-weighted vote that reduces to plain majority when graders are equally
+  reliable), never across questions. Per-grader reliability is estimated from agreement with the
+  per-question consensus (no gold labels).
+- **Pass policy** — an explicit combiner: a trial passes iff every *targeted* question matches
+  (e.g. `command=dir-reply` AND `no_error=ok`).
+- **Cell reliability** — pass-rate over a cell's valid trials with a Wilson 95% CI (small N ⇒
+  honestly wide).
+- **Slices** — group cells by metadata (arm, model, prompt kind, …) and flag those below a
+  reliability floor: the failure map.
+
+```
+# grade a finished run — two deterministic graders, no model calls
+python3 evaluate.py --in run.json --target dir-reply
+# add the schema check and/or a rubric judge (the judge makes live claude -p calls)
+python3 evaluate.py --in run.json --schemas tools.json --rubric judge.txt
+```
+
+Limits: the schema validator is a subset (`type`/`required`/`properties`/`enum`/array `items` — no
+`$ref`/`allOf`/formats; swap in `jsonschema` for full coverage); with a single grader per question
+the reliability estimate is trivially 1.0 — the denoiser only earns its keep with ≥2 *diverse*
+graders per question; the judge is the noisy grader, so never trust it solo. The graders, the label
+model, slices, and the `evaluate.py` orchestration are regression-tested offline in
+`tests/test_graders.py`.
+
 ## Contributing / share your results
 This is a general harness — the methodology and threat classes apply to any model's
 skills/RAG/tool-routing, not just Claude (only the example findings in `FINDINGS.md` happen to
