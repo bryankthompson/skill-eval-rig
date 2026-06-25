@@ -11,7 +11,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import evaluate                                                 # noqa: E402
 from graders import (Vote, DARK, CommandGrader, NoErrorGrader,  # noqa: E402
                      SchemaGrader, LLMJudgeGrader, grade_transcript,
-                     classify_is_error, ERROR_BUCKETS, _result_text)
+                     classify_is_error, ERROR_BUCKETS, _result_text,
+                     _validate, _discriminator)
 import label_model as LM                                        # noqa: E402
 from slices import Slice, slice_report                          # noqa: E402
 
@@ -184,6 +185,82 @@ class SchemaLive(unittest.TestCase):
 
     def test_no_schemas_abstains(self):
         self.assertTrue(SchemaGrader().grade(_tx([_TU("send_email", {})]), {}).abstain)
+
+
+# Discriminated-union (oneOf-on-action) schema — the item-C shape the composer emits: per-action
+# `const` arms with their own `required`, and an `anyOf` OR-condition arm.
+DU_SCHEMA = {"db": {
+    "type": "object", "required": ["action"],
+    "properties": {"action": {"enum": ["update", "list", "get"]}, "slug": {"type": "string"}},
+    "oneOf": [
+        {"type": "object", "properties": {"action": {"const": "update"}}, "required": ["action", "slug"]},
+        {"type": "object", "properties": {"action": {"const": "list"}}, "required": ["action"]},
+        {"type": "object", "properties": {"action": {"const": "get"}}, "required": ["action"],
+         "anyOf": [{"required": ["id"]}, {"required": ["slug"]}]},
+    ]}}
+
+
+class SchemaDiscriminatedUnion(unittest.TestCase):
+    """oneOf-on-action discriminated unions (item C) — only a real per-action shortfall votes invalid."""
+    def setUp(self):
+        self.g = SchemaGrader(DU_SCHEMA)
+
+    def test_du_update_without_slug_is_invalid(self):
+        v = self.g.grade(_tx([_TU("db", {"action": "update"})]), {})
+        self.assertEqual(v.vote, "invalid")
+        self.assertIn("missing required 'slug'", v.note)   # discriminator attribution, not a generic miss
+
+    def test_du_update_with_slug_is_ok(self):
+        self.assertEqual(self.g.grade(_tx([_TU("db", {"action": "update", "slug": "x"})]), {}).vote, "ok")
+
+    def test_du_action_with_no_required_fields_is_ok(self):
+        self.assertEqual(self.g.grade(_tx([_TU("db", {"action": "list"})]), {}).vote, "ok")
+
+    def test_du_or_condition_either_key_ok(self):
+        self.assertEqual(self.g.grade(_tx([_TU("db", {"action": "get", "id": 1})]), {}).vote, "ok")
+        self.assertEqual(self.g.grade(_tx([_TU("db", {"action": "get", "slug": "x"})]), {}).vote, "ok")
+
+    def test_du_or_condition_neither_key_invalid(self):
+        self.assertEqual(self.g.grade(_tx([_TU("db", {"action": "get"})]), {}).vote, "invalid")
+
+    def test_du_unknown_action_invalid(self):
+        self.assertEqual(self.g.grade(_tx([_TU("db", {"action": "bogus"})]), {}).vote, "invalid")
+
+    def test_du_non_object_input_fails_fast(self):
+        self.assertEqual(_validate(5, DU_SCHEMA["db"]), ["expected object"])  # early type-return, never reaches oneOf
+
+
+class ValidatorUnit(unittest.TestCase):
+    """_validate's new oneOf/const/anyOf branches at the function level."""
+    def test_discriminator_finds_action(self):
+        self.assertEqual(_discriminator(DU_SCHEMA["db"]), "action")
+
+    def test_discriminator_none_when_no_shared_const(self):
+        self.assertIsNone(_discriminator({"oneOf": [{"properties": {"a": {"const": 1}}},
+                                                    {"properties": {"b": {"const": 2}}}]}))
+
+    def test_const_match_and_mismatch(self):
+        self.assertEqual(_validate("update", {"const": "update"}), [])
+        self.assertEqual(_validate("get", {"const": "update"}), ["const mismatch"])
+
+    def test_oneof_exactly_one_no_discriminator(self):
+        # No shared const → generic exactly-one-arm semantics.
+        sch = {"oneOf": [{"required": ["a"]}, {"required": ["b"]}]}
+        self.assertEqual(_validate({"a": 1}, sch), [])              # matches exactly one
+        self.assertTrue(_validate({"a": 1, "b": 2}, sch))          # matches both → not exactly one
+
+    def test_anyof_at_least_one(self):
+        sch = {"anyOf": [{"required": ["id"]}, {"required": ["slug"]}]}
+        self.assertEqual(_validate({"id": 1}, sch), [])
+        self.assertTrue(_validate({}, sch))                        # neither → error
+
+    def test_malformed_arm_does_not_crash(self):
+        # A non-dict / property-less arm must NOT crash: _discriminator collapses to None and the
+        # generic exactly-one path tolerates it via _validate's isinstance(schema, dict) guard.
+        sch = {"oneOf": [{"properties": {"action": {"const": "update"}}, "required": ["slug"]},
+                         "not-a-dict"]}
+        self.assertIsNone(_discriminator(sch))
+        self.assertTrue(_validate({"action": "update"}, sch))      # invalid (no slug), but no crash
 
 
 class JudgeLive(unittest.TestCase):
