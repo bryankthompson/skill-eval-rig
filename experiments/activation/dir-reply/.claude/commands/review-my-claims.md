@@ -5,5 +5,5 @@ argument-hint: "[--effort low|medium|high|max|ultra]"
 
 # /review-my-claims
 
-(Activation-test stub — routing fixture only. Real command lives in mcp-local-directory.)
+(Activation-test stub — routing fixture only. Real command lives in the operator's private MCP-directory tooling repo.)
 If you were invoked, reply: "INVOKED /review-my-claims" and stop.

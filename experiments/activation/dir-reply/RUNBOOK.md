@@ -1,24 +1,24 @@
 # Activation test — does `/dir-reply` auto-activate on email/reply requests?
 
-> **Scope:** this is the **command (`/dir-reply`) A/B** — the PR #2327 OLD-vs-REVISED description
+> **Scope:** this is the **command (`/dir-reply`) A/B** — the OLD-vs-REVISED `/dir-reply` description
 > experiment. **Sibling:** `../RUNBOOK.md` covers **skill** auto-activation — the synthetic
 > `vacuum-expert` / `ctx-policy-71` needle-`4200` budget/naming cliff probe.
 
-The interactive, gold-standard follow-up to PR #2327 (mcp-local-directory) — the test the
+The interactive, gold-standard follow-up to the `/dir-reply` description revision — the test the
 headless `claude -p` probe **cannot** do (headless never auto-invokes a command; it only
-forced-selects). This measures the thing that actually failed in the 2026-06-23 Tableau miss:
+forced-selects). This measures the kind of real-world miss this was built to catch:
 *does the model, on its own, reach for `/dir-reply` when the user asks to draft an email?*
 
 ## Why a fixture (not the real repo)
-A fresh session **in mcp-local-directory is contaminated**: its SessionStart loads the recent
-status-db sessions — including the one logging *"harden /dir-reply routing… email requests"* —
-which primes the model to route email→/dir-reply. This fixture has no status-db / no CLAUDE.md
+A fresh session **in the operator's private MCP-directory repo is contaminated**: its SessionStart loads the recent
+session-log entries — including the one logging *"harden /dir-reply routing… email requests"* —
+which primes the model to route email→/dir-reply. This fixture has no session log / no CLAUDE.md
 priming, so it isolates the routing-signal effect of the `description:` alone.
 
 ## A/B design
 Two sibling fixtures, **identical except `/dir-reply`'s `description:`**:
-- `dir-reply-old/`  — the pre-#2327 description (**zero** email/gmail/message tokens).
-- `dir-reply/`      — the merged #2327 description (carries draft/write/email/message/reply/Gmail).
+- `dir-reply-old/`  — the original (OLD) description (**zero** email/gmail/message tokens).
+- `dir-reply/`      — the REVISED description (carries draft/write/email/message/reply/Gmail).
 
 Both load the same 7 sibling stubs (dir-email-sync, dir-outreach, dir-plugin-outreach,
 review-my-claims, dir-server-status, dir-fix-tests, dir-publish) **and** the same global
@@ -51,7 +51,7 @@ framings; see "Reading the result"):
 
 ## Reading the result
 **Headline finding:** the `/dir-reply` command **name** is itself a strong router — under the
-pre-#2327 (email-token-free) OLD description it *already* auto-fires `/dir-reply` on the "**reply**…"
+original (OLD, email-token-free) description it *already* auto-fires `/dir-reply` on the "**reply**…"
 framings, purely on the name⇄"reply" match. So the description fix's measurable effect is on the
 framings the name can't reach (the non-"reply" email asks). A raw "≥3/4 gained" bar would mislabel
 a working fix, because some positives are at ceiling under OLD with no headroom for the description
@@ -71,11 +71,11 @@ buckets it returns (match the doc to the code — the code is the source of trut
 - **`DESCRIPTION-DELTA UNTESTABLE`** — `/mcp-prime-dev-email` wins at least `⌊n/2⌋` of the positives
   (floor — `max(1, n//2)` in the code; = half for the shipped 4-positive battery) under **both**
   arms, masking the delta (the global competitor still collides — a `/dir-reply` "verified partner
-  reply" edge follow-up, tracked in status-db id 1441).
+  reply" edge follow-up, tracked internally).
 - **`FIX FAILED / INCONCLUSIVE`** — REVISED gains **none** of the OLD-dark positives, **or** steals
   a negative into `/dir-reply` (a stolen negative always overrides partial gain — `FIX EFFECTIVE
   (PARTIAL)` requires the negatives held, so partial-gain-with-a-steal falls through to here).
 
 - **n is small + interactive** — run each prompt 2–3× if a result looks flaky; auto-activation is
-  the documented silent-cliff axis (`reference_skill_eval_rig`), so a single trial is indicative,
+  the documented silent-cliff axis, so a single trial is indicative,
   not definitive.

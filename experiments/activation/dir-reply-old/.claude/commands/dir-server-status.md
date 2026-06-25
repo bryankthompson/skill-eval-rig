@@ -5,5 +5,5 @@ argument-hint: <slug | repo | github-url | dev-email> [--paste] [--json] [--all]
 
 # /dir-server-status
 
-(Activation-test stub — routing fixture only. Real command lives in mcp-local-directory.)
+(Activation-test stub — routing fixture only. Real command lives in the operator's private MCP-directory tooling repo.)
 If you were invoked, reply: "INVOKED /dir-server-status" and stop.
