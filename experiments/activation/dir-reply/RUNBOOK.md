@@ -71,7 +71,7 @@ buckets it returns (match the doc to the code — the code is the source of trut
 - **`DESCRIPTION-DELTA UNTESTABLE`** — `/mcp-prime-dev-email` wins at least `⌊n/2⌋` of the positives
   (floor — `max(1, n//2)` in the code; = half for the shipped 4-positive battery) under **both**
   arms, masking the delta (the global competitor still collides — a `/dir-reply` "verified partner
-  reply" edge follow-up, tracked internally).
+  reply" edge follow-up, noted as an open follow-up item).
 - **`FIX FAILED / INCONCLUSIVE`** — REVISED gains **none** of the OLD-dark positives, **or** steals
   a negative into `/dir-reply` (a stolen negative always overrides partial gain — `FIX EFFECTIVE
   (PARTIAL)` requires the negatives held, so partial-gain-with-a-steal falls through to here).

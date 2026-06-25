@@ -201,6 +201,12 @@ class ScoreBattery(unittest.TestCase):
         neg = {"n1": ("dir-email-sync", "dir-email-sync")}
         v = di.score_battery(self._battery(rev, old, neg))
         self.assertEqual(v["label"], "DESCRIPTION-DELTA UNTESTABLE")
+        # Pin the UNTESTABLE-bucket detail f-string (parity with the FIX VALIDATED / FIX FAILED
+        # buckets, which already pin their detail substrings) so a future regression to it surfaces.
+        # STABLE STRUCTURAL substrings only — no run-specific counts, no denylisted token (the
+        # hygiene guard, tests/test_public_hygiene.py, would fail on one).
+        self.assertIn("positives under BOTH arms", v["detail"])
+        self.assertIn("the global competitor masks the description change", v["detail"])
 
     def test_fix_failed_when_no_old_dark_positive_gained(self):
         # OLD missed all 4; REVISED still fires none → gained 0/4 of the addressable set → FAILED.
