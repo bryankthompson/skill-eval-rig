@@ -18,7 +18,11 @@ python3 gen_listing.py --out /tmp/act/L4_dropped --needle-name ctx-policy-71 --n
 # Control for L4: same opaque name, description PRESENT (normal budget)
 python3 gen_listing.py --out /tmp/act/L4_present --needle-name ctx-policy-71 --fillers 3 --filler-desc-chars 20
 ```
-(Edit `tasks.json` cwd paths to match, then use it as a VS Code launcher: Run Task → pick a level.)
+(Build commands run from the repo root — `gen_listing.py` lives there.) To launch these as a VS Code
+task, run `bash experiments/activation/install-vscode-tasks.sh` first: VS Code only discovers tasks at
+`.vscode/tasks.json` in the workspace root, so the installer copies `tasks.json` there. Then **Run Task →
+pick a level**. The task `cwd`s default to `/tmp/act/<level>`; if you built elsewhere, edit the source
+`tasks.json` and re-run the installer (it overwrites `.vscode/tasks.json`).
 
 ## Protocol — run in EACH level's fresh interactive session
 **ORDER MATTERS.** Do Step 1 *before* `/doctor` or `/skills` — running those first dumps skill names into the conversation and primes the model, contaminating the auto-activation measurement.

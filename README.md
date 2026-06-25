@@ -21,6 +21,15 @@ It exercises four axes:
   - Two activation experiments live under `experiments/activation/`, for two distinct things: `experiments/activation/RUNBOOK.md` is the **synthetic SKILL** auto-activation cliff probe (the `vacuum-expert`/`ctx-policy-71` needle-`4200` budget/naming experiment), while `experiments/activation/dir-reply/RUNBOOK.md` is the **real-world COMMAND A/B** (`/dir-reply` OLD-vs-REVISED, the PR #2327 validation the pty driver automates).
 - **Implication for your own CI:** automated *headless* eval will silently miss the activation cliff. Budget pressure that drops a skill's description can make it stop auto-firing, and `-p` tests won't catch it — you need an interactive pty driver (this is what `experiments/activation.sh` provides). The pty driver still costs real interactive sessions, so it is not free like the structural probes.
 
+### Run the interactive activation experiment in VS Code
+
+This is the **manual** launcher for the **synthetic-skill** cliff probe (`experiments/activation/RUNBOOK.md`) — the one axis with no automated driver. (The pty driver in Quick start, `experiments/activation.sh`, automates the *dir-reply command A/B*, not this human-in-the-loop synthetic-skill probe.) To drive it yourself:
+
+1. **Build the conditions**, run **from the repo root** (`gen_listing.py` lives there): the four `python3 gen_listing.py --out /tmp/act/…` commands in [`experiments/activation/RUNBOOK.md`](experiments/activation/RUNBOOK.md#build-the-conditions).
+2. **Install the launcher:** `bash experiments/activation/install-vscode-tasks.sh`. VS Code only discovers tasks at `.vscode/tasks.json` in the workspace root, so the installer copies the tracked `experiments/activation/tasks.json` there (`.vscode/` is gitignored — the copy is per-clone).
+3. **Run a level:** `Cmd-Shift-P` → **Tasks: Run Task** → pick one of `activation: L0_under`, `activation: L2_over`, `activation: L4_present (control)`, `activation: L4_dropped (needle goes dark)`. Each opens an interactive `claude` in that condition's `/tmp/act/<level>` dir.
+4. **Follow the protocol** in [`experiments/activation/RUNBOOK.md`](experiments/activation/RUNBOOK.md): a natural prompt first (is the answer `4200`?), then `/doctor` + `/skills` for drop status, then explicit `/<needle>` as the control.
+
 ## Quick start
 ```
 # structural budget probe (no inference cost)
