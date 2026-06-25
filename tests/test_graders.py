@@ -10,7 +10,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import evaluate                                                 # noqa: E402
 from graders import (Vote, DARK, CommandGrader, NoErrorGrader,  # noqa: E402
-                     SchemaGrader, LLMJudgeGrader, grade_transcript)
+                     SchemaGrader, LLMJudgeGrader, grade_transcript,
+                     classify_is_error, ERROR_BUCKETS, _result_text)
 import label_model as LM                                        # noqa: E402
 from slices import Slice, slice_report                          # noqa: E402
 
@@ -43,9 +44,17 @@ def _U(text):
     return {"type": "user", "message": {"content": text}}
 
 
-def _ERR(tuid="t1"):
+def _ERR(tuid="t1", content="boom"):
     return {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": tuid,
-                                                     "is_error": True, "content": "boom"}]}}
+                                                     "is_error": True, "content": content}]}}
+
+
+# Real corpus marker strings (re-derived from a 3,551-transcript sweep), one per non-failure bucket.
+_REJECT_MARK = ("The user doesn't want to proceed with this tool use. The tool use was rejected "
+                "(eg. if it was a file edit, the new_string was NOT written to the file).")
+_PERM_MARK = "Claude requested permissions to use mcp__plugin-db__plugins, but you haven't granted it yet."
+# the trailing "(#NN) — resolve…" tail is deliberately present to prove the matcher ignores it.
+_GUARD_MARK = "verify-before-assert gate (#42) — resolve before drafting:\n- \"some claim\": status=\"assumed\""
 
 
 def tearDownModule():
@@ -242,6 +251,81 @@ class DeterministicGraders(unittest.TestCase):
 
     def test_no_error_empty_abstains(self):
         self.assertTrue(NoErrorGrader().grade(_tx([]), {}).abstain)
+
+    # --- is_error taxonomy: only a real-error penalizes the no_error reliability axis ---
+    def test_real_error_votes_error(self):
+        v = NoErrorGrader().grade(_tx([_A("x"), _ERR(content="<tool_use_error>boom</tool_use_error>")]), {})
+        self.assertEqual(v.vote, "error")
+        self.assertEqual(v.note, "real-error")
+
+    def test_user_rejection_votes_ok(self):
+        v = NoErrorGrader().grade(_tx([_A("x"), _ERR(content=_REJECT_MARK)]), {})
+        self.assertEqual(v.vote, "ok")           # a declined tool is NOT a tool failure
+        self.assertIn("user-rejection", v.note)
+
+    def test_permission_not_granted_votes_ok(self):
+        v = NoErrorGrader().grade(_tx([_A("x"), _ERR(content=_PERM_MARK)]), {})
+        self.assertEqual(v.vote, "ok")
+        self.assertIn("permission-not-granted", v.note)
+
+    def test_by_design_guard_votes_ok(self):
+        v = NoErrorGrader().grade(_tx([_A("x"), _ERR(content=_GUARD_MARK)]), {})
+        self.assertEqual(v.vote, "ok")
+        self.assertIn("by-design-guard", v.note)
+
+    def test_real_error_wins_over_preceding_non_fatal(self):
+        # A non-fatal is_error must NOT mask a later real error — the grader scans past it.
+        p = _tx([_A("x"), _ERR(tuid="a", content=_REJECT_MARK), _ERR(tuid="b", content="boom")])
+        self.assertEqual(NoErrorGrader().grade(p, {}).vote, "error")
+
+    def test_only_non_fatal_errors_vote_ok(self):
+        p = _tx([_A("x"), _ERR(tuid="a", content=_REJECT_MARK), _ERR(tuid="b", content=_PERM_MARK)])
+        v = NoErrorGrader().grade(p, {})
+        self.assertEqual(v.vote, "ok")
+        # both buckets recorded, de-duped + sorted
+        self.assertEqual(v.note, "non-fatal is_error: permission-not-granted,user-rejection")
+
+    def test_content_as_block_list_is_classified(self):
+        # The API list-of-blocks content shape, not just a bare string, must classify.
+        blocks = [{"type": "text", "text": _REJECT_MARK}]
+        v = NoErrorGrader().grade(_tx([_A("x"), _ERR(content=blocks)]), {})
+        self.assertEqual(v.vote, "ok")
+        self.assertIn("user-rejection", v.note)
+
+    def test_classify_buckets_and_default(self):
+        self.assertEqual(classify_is_error(_REJECT_MARK), "user-rejection")
+        self.assertEqual(classify_is_error(_PERM_MARK), "permission-not-granted")
+        self.assertEqual(classify_is_error("...you haven't granted it yet."), "permission-not-granted")
+        self.assertEqual(classify_is_error(_GUARD_MARK), "by-design-guard")
+        # only the anchored gate header classifies — the generic phrase alone does NOT (W#1)
+        self.assertEqual(classify_is_error("verify-before-assert gate fired"), "by-design-guard")
+        self.assertEqual(classify_is_error("resolve before drafting: claim X"), "real-error")
+        self.assertEqual(classify_is_error("Exit code 1\nFAILED test foo"), "real-error")
+        self.assertEqual(classify_is_error(""), "real-error")
+        self.assertEqual(classify_is_error(None), "real-error")
+        self.assertIn("real-error", ERROR_BUCKETS)
+
+    def test_real_errors_mentioning_markers_stay_real(self):
+        # A genuine failure that merely ECHOES gate/permission vocabulary must NOT be excused — the
+        # markers are anchored on outcome tokens, not request preambles or generic phrases.
+        self.assertEqual(classify_is_error("EACCES: permission denied, open /etc/foo"), "real-error")
+        self.assertEqual(classify_is_error("Permission denied (publickey)"), "real-error")
+        self.assertEqual(classify_is_error("FileNotFoundError: resolve before drafting.md"), "real-error")
+        # the permission REQUEST preamble without the not-granted outcome is still a real error
+        self.assertEqual(classify_is_error("crashed after Claude requested permissions to use X"), "real-error")
+
+    def test_result_text_flattens_shapes(self):
+        self.assertEqual(_result_text("hi"), "hi")
+        self.assertEqual(_result_text([{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]), "a b")
+        self.assertEqual(_result_text({"type": "text", "text": "x"}), "x")
+        self.assertEqual(_result_text(None), "")
+
+    def test_user_rejection_passes_no_error_policy(self):
+        # The headline: a trial whose only is_error is a user rejection must PASS the no_error
+        # reliability target (`no_error: "ok"`), where pre-taxonomy it FAILED.
+        p = _tx([_A("x"), _ERR(content=_REJECT_MARK)])
+        verdict = LM.trial_verdict(grade_transcript(p, {}, [NoErrorGrader()]))
+        self.assertTrue(LM.pass_policy(verdict, {"no_error": "ok"}))
 
     def test_grade_transcript_stamps_names_and_questions(self):
         p = _tx([_U("draft them an email"), _A("INVOKED /dir-reply")])

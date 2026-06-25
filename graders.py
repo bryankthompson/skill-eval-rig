@@ -77,10 +77,60 @@ class CommandGrader:
                     note="mismatch" if det.get("mismatch") else "")
 
 
+# is_error taxonomy. Not every `tool_result.is_error` is a reliability failure: a tool can come
+# back is_error because the USER declined it, because a permission prompt wasn't granted, or because
+# a by-design verify gate fired and blocked an action on purpose. Treating those as failures makes
+# the no_error reliability axis untrustworthy on a real corpus — a sweep of 3,551 transcripts
+# (3,183 is_error tool_results) found ~13% of them in these three non-failure buckets, the rest real
+# tool errors. The marker strings below were re-derived FROM that corpus, not invented.
+ERROR_BUCKETS = ("real-error", "user-rejection", "permission-not-granted", "by-design-guard")
+
+
+def _result_text(content):
+    """A tool_result's `content` is usually a plain string; the API list-of-blocks shape
+    (`[{type:"text", text:...}]`) is the other form. Flatten both to one string; anything else → ''."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(b.get("text", "") for b in content if isinstance(b, dict))
+    if isinstance(content, dict):                      # single-object shape (undocumented but possible)
+        return content.get("text", "")
+    return "" if content is None else str(content)
+
+
+def classify_is_error(text):
+    """Bucket an is_error tool_result's content text into one of ERROR_BUCKETS by stable marker
+    string. Only `real-error` (the default) is a genuine tool-reliability failure; the other three
+    are workflow friction the no_error axis must NOT penalize:
+      - user-rejection        the operator declined the tool use (the harness rejection string)
+      - permission-not-granted a permission prompt that wasn't granted (the harness prompt string)
+      - by-design-guard        a verify-before-assert gate firing as intended
+    Markers are substring matches re-derived from the real corpus, each anchored on the single
+    most-specific OUTCOME token (not a request preamble or a generic phrase) so a genuine real-error
+    that merely echoes gate/permission vocabulary is not wrongly excused. They are loose only on the
+    trailing tail (e.g. `verify-before-assert gate`, not the gate's full versioned header) so an
+    evolving gate still classifies. Misclassifying toward `real-error` is the safe direction
+    (over-count, not mask)."""
+    t = text or ""
+    if "The user doesn't want to proceed with this tool use" in t:
+        return "user-rejection"
+    if "haven't granted it yet" in t:                 # the NOT-granted outcome, not the request preamble
+        return "permission-not-granted"
+    if "verify-before-assert gate" in t:              # the gate header; a generic phrase would be unsafe
+        return "by-design-guard"
+    return "real-error"
+
+
 class NoErrorGrader:
     """A DIFFERENT question from CommandGrader: did any tool_result come back is_error? Votes
     ok/error. Deterministic and independent of which command fired — the independence the label
-    model wants."""
+    model wants.
+
+    Not every is_error is a failure (see `classify_is_error`): a user rejection, an ungranted
+    permission prompt, or a by-design verify gate are workflow friction, not tool failures, so they
+    vote `ok` (the bucket is recorded in `note`). Only a `real-error` votes `error`. This keeps the
+    vocabulary — and the `no_error: "ok"` pass policy — unchanged while making the reliability axis
+    trustworthy on a real corpus."""
     name = "no_error"
     question = "no_error"
 
@@ -88,11 +138,23 @@ class NoErrorGrader:
         evs = _events(transcript)
         if not evs:
             return Vote.no_opinion(self.question, note="empty transcript")
+        non_fatal = []
         for e in evs:
             for c in (e.get("message") or {}).get("content") or []:
                 if isinstance(c, dict) and c.get("type") == "tool_result" and c.get("is_error"):
-                    return Vote(self.question, "error", confidence=0.99, grader=self.name,
-                                note="tool_result is_error")
+                    bucket = classify_is_error(_result_text(c.get("content")))
+                    if bucket == "real-error":
+                        # First REAL error decides it — scan no further.
+                        return Vote(self.question, "error", confidence=0.99, grader=self.name,
+                                    note="real-error")
+                    non_fatal.append(bucket)
+        if non_fatal:
+            # is_error(s) present, but every one is a non-failure bucket — NOT a reliability failure.
+            # Buckets are sorted + de-duped for a deterministic note. Slightly lower confidence than
+            # a clean `ok`: this `ok` rests on substring markers, so a future no_error grader that
+            # disagrees should be able to down-weight it.
+            note = "non-fatal is_error: " + ",".join(sorted(set(non_fatal)))
+            return Vote(self.question, "ok", confidence=0.85, grader=self.name, note=note)
         return Vote(self.question, "ok", confidence=0.9, grader=self.name)
 
 
