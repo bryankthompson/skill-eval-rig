@@ -172,10 +172,60 @@ def _type_ok(value, t):
     return py is None or isinstance(value, py)
 
 
+def _discriminator(schema):
+    """If every `oneOf` arm constrains the SAME property to a distinct `const`, return that property
+    name — the discriminator. This lets a failed discriminated union report the matching arm's OWN
+    errors (e.g. `missing required 'slug'`) instead of a useless "matched no arm". Returns None when
+    the arms aren't a clean discriminated union → fall back to generic oneOf semantics."""
+    arms = schema.get("oneOf")
+    if not isinstance(arms, list) or not arms:
+        return None
+    candidates = None
+    for arm in arms:
+        props = (arm.get("properties") or {}) if isinstance(arm, dict) else {}
+        keyed = {k for k, sub in props.items() if isinstance(sub, dict) and "const" in sub}
+        candidates = keyed if candidates is None else (candidates & keyed)
+        if not candidates:
+            return None
+    for disc in sorted(candidates):                       # require the consts be mutually distinct
+        seen = [arm["properties"][disc]["const"] for arm in arms]
+        if len(seen) == len(set(map(repr, seen))):
+            return disc
+    return None
+
+
+def _validate_oneof(value, schema):
+    """oneOf = valid against EXACTLY ONE arm. With a discriminator present, the arm whose const the
+    input matches is selected and ITS errors are returned (the high-value attribution); otherwise
+    fall back to exactly-one-arm — safe because a discriminated union's consts are mutually
+    exclusive, so at-most-one can ever match."""
+    if not isinstance(value, dict):
+        return ["expected object for oneOf"]             # own guard — don't assume a prior type check
+    arms = schema["oneOf"]
+    disc = _discriminator(schema)
+    if disc is not None and disc in value:
+        for arm in arms:
+            if value.get(disc) == arm["properties"][disc]["const"]:
+                return _validate(value, arm)             # report THIS arm's errors verbatim
+        return [f"{disc} '{value[disc]}' matches no known variant"]
+    # Generic path (no clean discriminator): ignore malformed non-dict arms — a non-dict arm makes
+    # `_validate` return [] (vacuous match), which would let it act as a wildcard that passes anything.
+    arms = [a for a in arms if isinstance(a, dict)]
+    if not arms:
+        return []                                        # degenerate union — nothing well-formed to check
+    matches = [arm for arm in arms if not _validate(value, arm)]
+    if len(matches) == 1:
+        return []
+    if not matches:
+        return _validate(value, arms[0]) or ["matched no oneOf variant"]
+    return [f"matched {len(matches)} oneOf variants (expected exactly one)"]
+
+
 def _validate(value, schema):
-    """Minimal JSON-Schema check: type, required, properties, enum, array items. A documented SUBSET
-    — no $ref / allOf / anyOf / formats / patternProperties. Swap in `jsonschema` for full coverage;
-    kept stdlib so `make test` stays dependency-free (CI runs bare python3). Returns error strings."""
+    """Minimal JSON-Schema check: type, required, properties, enum, const, array items, and
+    oneOf/anyOf (the latter for discriminated unions — see `_validate_oneof`). A documented SUBSET —
+    no $ref / allOf / formats / patternProperties. Swap in `jsonschema` for full coverage; kept
+    stdlib so `make test` stays dependency-free (CI runs bare python3). Returns error strings."""
     if not isinstance(schema, dict):
         return []
     t = schema.get("type")
@@ -184,6 +234,8 @@ def _validate(value, schema):
     errs = []
     if "enum" in schema and value not in schema["enum"]:
         errs.append("not in enum")
+    if "const" in schema and value != schema["const"]:
+        errs.append("const mismatch")
     if isinstance(value, dict):
         for req in schema.get("required", []):
             if req not in value:
@@ -194,7 +246,16 @@ def _validate(value, schema):
     if isinstance(value, list) and "items" in schema:
         for i, item in enumerate(value):
             errs += [f"[{i}].{m}" for m in _validate(item, schema["items"])]
-    return errs
+    if isinstance(schema.get("oneOf"), list):
+        errs += _validate_oneof(value, schema)
+    if isinstance(schema.get("anyOf"), list):            # at-least-one (used inside an arm's OR-condition)
+        arms = schema["anyOf"]
+        if all(_validate(value, arm) for arm in arms):
+            # Don't report arm[0]'s missing key as if it were the only option — say how many there are.
+            errs.append(f"satisfies no anyOf variant ({len(arms)} options)")
+    # De-dup while preserving order: the no-discriminator oneOf fallback can re-report a top-level
+    # `required` error. Harmless via SchemaGrader (first-error only) but keeps a full errs[] render clean.
+    return list(dict.fromkeys(errs))
 
 
 class SchemaGrader:
