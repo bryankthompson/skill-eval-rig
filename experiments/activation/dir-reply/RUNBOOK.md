@@ -29,11 +29,12 @@ the description change alone.
 Each command is an inert **stub**: if the model invokes it, the stub replies `INVOKED /<name>`
 and stops — so the routing choice is crisp in the transcript (no real side effects).
 
-## How to run (VS Code → Run Task, or `cd <fixture> && claude "<prompt>"`)
-Tasks are in `mcp-local-directory/.vscode/tasks.json`, labelled `dir-reply-activation [OLD|REVISED] …`.
-Run each as a **fresh** session (the task clears the panel). For each prompt, record **which
-command the model invoked** (look for `INVOKED /<name>`), or `none` if it answered in prose / went
-straight for a raw tool.
+## How to run (pty driver, or manual `cd <fixture> && claude "<prompt>"`)
+This A/B is automated by the pty driver — run `experiments/activation.sh` (→ `drive_interactive.py`),
+which drives both arms and scores the battery (see "Reading the result"). To run a single prompt
+**manually**, launch a **fresh** session inside a fixture: `cd dir-reply-old/` (or `cd dir-reply/`),
+then `claude "<prompt>"`. For each prompt, record **which command the model invoked** (look for
+`INVOKED /<name>`), or `none` if it answered in prose / went straight for a raw tool.
 
 ## Battery + bar
 **Positives** (where the description fix can move routing toward `/dir-reply` — but note OLD
