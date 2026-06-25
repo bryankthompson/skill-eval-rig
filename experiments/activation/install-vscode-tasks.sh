@@ -15,11 +15,22 @@ set -euo pipefail
 # experiments/activation/ -> repo root), so this works from any cwd. $0 matches
 # the house style of every other script in this repo; run it as
 # `bash experiments/activation/install-vscode-tasks.sh` (do not `source` it).
+# Guard the off-protocol bare-name (PATH) invocation, where $0 has no directory
+# component and dirname returns "." -> a wrong root.
+case "$0" in
+  */*) ;;
+  *) echo "FATAL: run as 'bash experiments/activation/install-vscode-tasks.sh' (needs a path, not a bare name)" >&2; exit 2 ;;
+esac
 RIG="$(cd "$(dirname "$0")/../.." && pwd)"
 
 SRC="$RIG/experiments/activation/tasks.json"
 DEST_DIR="$RIG/.vscode"
 DEST="$DEST_DIR/tasks.json"
+
+# Fail loud with a domain message if the source launcher is missing (matches the
+# repo's fail-loud-with-context convention, e.g. run_trials.sh's fixture guard)
+# rather than a raw `cp:` error.
+[ -f "$SRC" ] || { echo "FATAL: source launcher missing at $SRC" >&2; exit 3; }
 
 mkdir -p "$DEST_DIR"
 cp "$SRC" "$DEST"
