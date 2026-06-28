@@ -258,6 +258,38 @@ def _validate(value, schema):
     return list(dict.fromkeys(errs))
 
 
+try:                                                          # OPTIONAL dependency, never required
+    import jsonschema as _jsonschema
+    from jsonschema.validators import validator_for as _validator_for
+    _HAS_JSONSCHEMA = True
+except ImportError:                                          # pragma: no cover - stdlib-only fallback
+    _HAS_JSONSCHEMA = False
+
+
+def _validate_full(value, schema):
+    """Full JSON-Schema validation when `jsonschema` is importable; the stdlib `_validate` subset
+    otherwise. Run STDLIB FIRST and return its errors verbatim if any — that preserves `_validate`'s
+    messages (incl. the oneOf discriminator attribution) and its already-exactly-one oneOf semantics,
+    so existing graders/tests are unchanged. Only when the stdlib subset finds NOTHING do we consult
+    `jsonschema` to catch the keywords the subset documents as out of scope ($ref / allOf /
+    additionalProperties / patternProperties / formats). This is strictly a SUPERSET of `_validate`:
+    never more lenient, and on bare python3 (no jsonschema) it IS `_validate` (dependency-free
+    `make test`). Returns a list of error strings (non-empty = invalid), matching `_validate`'s
+    contract so SchemaGrader.grade is unaffected by the swap."""
+    errs = _validate(value, schema)
+    if errs or not _HAS_JSONSCHEMA or not isinstance(schema, dict):
+        return errs
+    try:
+        cls = _validator_for(schema, default=_jsonschema.Draft202012Validator)
+        cls.check_schema(schema)                            # malformed schema → SchemaError → fall back below
+        validator = cls(schema)
+        # str(path elems) for a total, type-mixed-safe ordering (path holds str keys AND int indices).
+        return [e.message for e in sorted(validator.iter_errors(value),
+                                          key=lambda e: [str(p) for p in e.path])]
+    except _jsonschema.exceptions.SchemaError:
+        return errs                                          # malformed schema is the author's fault, not the input's
+
+
 class SchemaGrader:
     """LIVE deterministic grader: validate each tool_use input against the tool's declared JSON
     schema. Votes ok/invalid; abstains when no schemas are configured, the transcript is empty, or
@@ -280,7 +312,7 @@ class SchemaGrader:
                 continue
             for c in (e.get("message") or {}).get("content") or []:
                 if isinstance(c, dict) and c.get("type") == "tool_use" and c.get("name") in self.schemas:
-                    checked.append((c["name"], _validate(c.get("input"), self.schemas[c["name"]])))
+                    checked.append((c["name"], _validate_full(c.get("input"), self.schemas[c["name"]])))
         if not checked:
             return Vote.no_opinion(self.question, note="no tool_use matched a configured schema")
         bad = [(tool, errs) for tool, errs in checked if errs]
