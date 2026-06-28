@@ -12,7 +12,13 @@ import evaluate                                                 # noqa: E402
 from graders import (Vote, DARK, CommandGrader, NoErrorGrader,  # noqa: E402
                      SchemaGrader, LLMJudgeGrader, grade_transcript,
                      classify_is_error, ERROR_BUCKETS, _result_text,
-                     _validate, _discriminator)
+                     _validate, _validate_full, _discriminator)
+
+try:
+    import jsonschema as _JS  # noqa: F401
+    _HAS_JS = True
+except ImportError:
+    _HAS_JS = False
 import label_model as LM                                        # noqa: E402
 from slices import Slice, slice_report                          # noqa: E402
 
@@ -261,6 +267,64 @@ class ValidatorUnit(unittest.TestCase):
                          "not-a-dict"]}
         self.assertIsNone(_discriminator(sch))
         self.assertTrue(_validate({"action": "update"}, sch))      # invalid (no slug), but no crash
+
+
+# Schemas exercising the keywords the stdlib `_validate` subset documents as out of scope.
+_REF_SCHEMA = {"type": "object", "properties": {"x": {"$ref": "#/$defs/P"}},
+               "required": ["x"], "$defs": {"P": {"type": "integer", "enum": [1, 2, 3]}}}
+_ALLOF_SCHEMA = {"type": "object", "properties": {"a": {}, "b": {}},
+                 "allOf": [{"required": ["a"]}, {"required": ["b"]}]}
+_ADDPROPS_SCHEMA = {"type": "object", "properties": {"x": {"type": "string"}},
+                    "additionalProperties": False}
+
+
+class ValidatorFull(unittest.TestCase):
+    """_validate_full is a strict SUPERSET of the stdlib `_validate`: it runs the subset first
+    (preserving its messages + oneOf attribution) and only consults jsonschema when the subset
+    passed — so it is never MORE lenient, and on bare python3 it IS the subset."""
+
+    def test_stdlib_caught_errors_pass_through_verbatim(self):
+        # When the stdlib subset finds an error, _validate_full returns it UNCHANGED (same message +
+        # discriminator attribution) regardless of whether jsonschema is installed. Runs in both states.
+        for v, s in (({"action": "update"}, DU_SCHEMA["db"]),       # missing required 'slug' (attribution)
+                     ({"x": "z"}, {"type": "object", "properties": {"x": {"enum": ["a", "b"]}},
+                                   "required": ["x"]})):             # enum (the positive control)
+            self.assertEqual(_validate_full(v, s), _validate(v, s))
+            self.assertTrue(_validate_full(v, s))
+
+    def test_valid_input_is_clean_in_either_state(self):
+        self.assertEqual(_validate_full({"x": 2}, _REF_SCHEMA), [])
+        self.assertEqual(_validate_full({"a": 1, "b": 2}, _ALLOF_SCHEMA), [])
+        self.assertEqual(_validate_full({"x": "ok"}, _ADDPROPS_SCHEMA), [])
+
+
+@unittest.skipUnless(_HAS_JS, "jsonschema not installed — _validate_full is the stdlib subset here")
+class ValidatorFullWithJsonschema(unittest.TestCase):
+    """With jsonschema importable, _validate_full closes the subset's blind spots ($ref / allOf /
+    additionalProperties) the stdlib walker silently skips."""
+
+    def test_ref_violation_caught_but_stdlib_skips_it(self):
+        self.assertTrue(_validate_full({"x": "zzz"}, _REF_SCHEMA))   # violates the $ref'd integer enum
+        self.assertEqual(_validate({"x": "zzz"}, _REF_SCHEMA), [])   # the subset still skips $ref
+
+    def test_allof_violation_caught_but_stdlib_skips_it(self):
+        self.assertTrue(_validate_full({"a": 1}, _ALLOF_SCHEMA))     # missing b (second allOf arm)
+        self.assertEqual(_validate({"a": 1}, _ALLOF_SCHEMA), [])     # the subset skips allOf
+
+    def test_additionalproperties_violation_caught_but_stdlib_skips_it(self):
+        self.assertTrue(_validate_full({"x": "ok", "bog": 1}, _ADDPROPS_SCHEMA))
+        self.assertEqual(_validate({"x": "ok", "bog": 1}, _ADDPROPS_SCHEMA), [])
+
+    def test_schema_grader_vote_uses_full_validation(self):
+        # End-to-end through the grader: an additionalProperties violation now votes invalid.
+        g = SchemaGrader({"f": _ADDPROPS_SCHEMA})
+        self.assertEqual(g.grade(_tx([_TU("f", {"x": "ok", "bog": 1})]), {}).vote, "invalid")
+        self.assertEqual(g.grade(_tx([_TU("f", {"x": "ok"})]), {}).vote, "ok")
+
+    def test_malformed_schema_falls_back_not_crashes(self):
+        # A schema author error (not the model's fault) must not raise — fall back to the subset.
+        bad = {"type": "object", "properties": {"x": {"type": 123}}}   # invalid: type must be a string
+        self.assertEqual(_validate_full({"x": "v"}, bad), _validate({"x": "v"}, bad))
 
 
 class JudgeLive(unittest.TestCase):
