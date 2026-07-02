@@ -11,3 +11,6 @@ _trials/
 # source of truth is experiments/activation/tasks.json. Narrow this if you ever add an
 # intentional .vscode/settings.json (then ignore only .vscode/tasks.json).
 .vscode/
+
+# local-only deny tokens for the public-hygiene guard (never publish)
+tests/.deny-local

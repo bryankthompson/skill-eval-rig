@@ -5,7 +5,7 @@ A small harness for **empirically validating Claude Agent Skills behavior** by d
 reasoning from the spec. Built to answer real questions about structuring skills at scale
 (how many, how big, how deep, how many reference files, what breaks).
 
-It exercises four axes:
+It exercises five axes:
 
 | Axis | What it tests | Mode | Headline finding (our runs) |
 |---|---|---|---|
@@ -13,6 +13,30 @@ It exercises four axes:
 | **chaining** | reach a file *through* other files | headless | **never broke** to 10 hops + oversized files (the spec's `head -100` partial-read didn't reproduce) |
 | **budget** | the always-loaded listing limit | headless (structural) | `skillListingBudgetFraction`, default **1% of context, char-denominated** (~30K chars on a 1M-context model) |
 | **activation** | does a skill/command *auto*-fire, and survive truncation | **interactive** (now automated, pty) | dies *silently* only when description dropped **and** name uninformative |
+| **memory** | how "auto-memory" injects context (recall vs always-load) | headless + interactive | description-match topic recall **does not fire**; only `MEMORY.md` **always-loads** (whole, as a `<system-reminder>`); the transcript is **blind** to injection — see `experiments/memory-recall/FINDINGS.md` |
+
+## Methodology — patterns that transfer across axes
+
+Lessons that generalize beyond any one axis (banked from the memory-recall build; reusable by
+any new experiment):
+
+- **Positive-control gating.** A *negative* result ("X didn't fire / wasn't injected") is only
+  trustworthy if the SAME capture surface first showed a KNOWN-GOOD signal. Plant a control token
+  that MUST appear; if it doesn't, the surface is **blind** and its negatives are discarded, not reported.
+- **The transcript is not ground truth for what the model saw.** Skill bodies inject as synthetic
+  user messages (transcript-visible), but system-prompt-delivered context (the always-load memory
+  index) is **not** serialized per-turn — grepping the transcript for it finds only the model's own
+  echo. Prove your capture surface before trusting it; model self-report in the output is often the
+  only admissible one.
+- **Behavioral sentinels vs echo sentinels.** A pure echo token ("did it repeat TOKEN?") can't
+  distinguish *ingested-but-not-repeated* from *never-ingested*. For payload questions, make the
+  sentinel an instruction only a model that READ the content could satisfy (`gen_memory.py --behavioral`).
+- **Guard against self-referential echo.** Use nonce sentinels (not real words), and never let the
+  experiment's own artifacts (the driving prompt, this doc, a docstring) contain the token you're
+  scoring — else a grep matches the harness quoting itself, not the behavior under test.
+- **Interactive submit is bracketed-paste-fragile.** A long/multi-line prompt won't submit on a
+  single Enter (it's absorbed as a newline inside the paste); use
+  `drive_interactive.submit_and_await`, which resends Enter until the turn actually lands.
 
 ## The one thing to know first: headless vs interactive
 

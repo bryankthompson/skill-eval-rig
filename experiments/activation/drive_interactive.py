@@ -119,6 +119,36 @@ def turn_settled(path):
     return has_assistant_text and tool_use_ids.issubset(tool_result_ids)
 
 
+def submit_and_await(child, text, transcript, *, timeout, done, max_enters=6, poll=3):
+    """Submit ONE prompt to an interactive claude pty, then resend Enter until the turn lands.
+
+    Reusable interactive-submit primitive (any experiment can call it). It exists because the
+    claude TUI runs in bracketed-paste mode: a single ``\\r`` after a long / multi-line prompt is
+    absorbed as a NEWLINE inside the paste, not a submit — so the prompt sits in the input buffer
+    and the turn never fires (and a later stray keystroke can concatenate onto it). We therefore
+    resend Enter (up to ``max_enters``) until the caller's ``done()`` predicate reports a new
+    settled turn, or ``timeout`` elapses. ``done`` is a 0-arg callable the caller supplies
+    (e.g. ``lambda: turn_settled(transcript)`` for a single turn, or a turn-count check for
+    multi-turn). Returns True once ``done()`` is true, else False on timeout (an INFRA failure —
+    never score it as a model result). ``child`` is a live ``pexpect`` spawn."""
+    child.send(text)
+    time.sleep(2.0)
+    deadline = time.time() + timeout
+    enters = 0
+    while time.time() < deadline:
+        if enters < max_enters:
+            child.send("\r")
+            enters += 1
+        try:
+            child.read_nonblocking(size=65536, timeout=0)   # keep the pty drained
+        except Exception:
+            pass
+        time.sleep(poll)
+        if done():
+            return True
+    return False
+
+
 def run_trial(prompt, fixture, *, settle_idle=6, hard_timeout=150, ready_wait=7):
     """Drive ONE fresh interactive session; return a trial dict.
       {fixture, prompt, invoked, mismatch, valid, reason, elapsed, transcript}

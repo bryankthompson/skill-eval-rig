@@ -34,11 +34,25 @@ DENY = [
 ]
 DENY_CI = ["miro"]                 # a partner name — match case-insensitively
 
-# Public-facing tree to scan (matches the de-internalization pass's footprint):
-# everything under experiments/activation/, the top-level findings/readme, and tests/.
-SCAN_DIRS = [ROOT / "experiments" / "activation", ROOT / "tests"]
+# Operator-specific identifiers (username, private repo names) are loaded from a LOCAL, gitignored
+# supplement so this PUBLIC guard can CATCH them without SHIPPING them in its own source — a
+# deny-list that listed the operator's username as plaintext would itself be the leak. The
+# operator's checkout ships tests/.deny-local (one token per line, `# comment` allowed; see
+# .gitignore); a fresh public clone has no such file and simply scans the committed tokens above.
+_LOCAL = HERE / ".deny-local"
+if _LOCAL.exists():
+    for _ln in _LOCAL.read_text(encoding="utf-8").splitlines():
+        _t = _ln.split("#", 1)[0].strip()
+        if _t:
+            DENY.append(_t)
+
+# Public-facing tree to scan. Covers the WHOLE experiments/ tree (not just activation/), the
+# top-level findings/readme, tests/, AND every root-level script (*.py/*.sh) — the memory-recall
+# de-internalization pass widened this from experiments/activation-only, which had let a leak into
+# a root-level gen_memory.py + experiments/memory-recall/ slip past the guard.
+SCAN_DIRS = [ROOT / "experiments", ROOT / "tests"]
 SCAN_FILES = [ROOT / "FINDINGS.md", ROOT / "README.md"]
-SCAN_SUFFIXES = {".md", ".py"}
+SCAN_SUFFIXES = {".md", ".py", ".sh"}
 
 
 def _is_exempt_line(line: str) -> bool:
@@ -58,6 +72,12 @@ def _iter_files():
     for f in SCAN_FILES:
         if f.is_file():
             seen.add(f.resolve())
+    # Root-level scripts (gen_memory.py, gen_skill.py, score.py, memory-recall is under
+    # experiments/ …) — a public cloner sees these too, so they must be clean.
+    for suf in ("*.py", "*.sh"):
+        for p in ROOT.glob(suf):
+            if p.is_file():
+                seen.add(p.resolve())
     seen.discard(SELF)             # this guard necessarily contains the tokens as data
     return sorted(seen)
 
